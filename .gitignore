@@ -1,0 +1,140 @@
+# ==============================================
+# OPS Platform .gitignore
+# ==============================================
+
+# ==============================================
+# Environment Variables
+# ==============================================
+.env
+.env.local
+.env.*.local
+*.env
+
+# ==============================================
+# Python
+# ==============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+*.log
+
+# ==============================================
+# Virtual Environments
+# ==============================================
+venv/
+ENV/
+env/
+.venv
+
+# ==============================================
+# Node / Frontend
+# ==============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.DS_Store
+*.local
+dist/
+dist-ssr/
+*.tsbuildinfo
+
+# ==============================================
+# IDEs and Editors
+# ==============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+.vs/
+
+# ==============================================
+# Docker
+# ==============================================
+*.log
+docker-compose.override.yml
+
+# ==============================================
+# Database
+# ==============================================
+*.db
+*.sqlite
+*.sqlite3
+celerybeat-schedule
+celerybeat.pid
+
+# ==============================================
+# Monitoring
+# ==============================================
+prometheus_data/
+grafana_data/
+
+# ==============================================
+# Backups
+# ==============================================
+*.backup
+*.bak
+backups/
+*.sql.gz
+
+# ==============================================
+# Temporary Files
+# ==============================================
+*.tmp
+*.temp
+tmp/
+temp/
+
+# ==============================================
+# OS
+# ==============================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ==============================================
+# Secrets and Credentials
+# ==============================================
+*.pem
+*.key
+*.crt
+credentials.json
+secrets/
+
+# ==============================================
+# Documentation Build
+# ==============================================
+docs/_build/
+site/
