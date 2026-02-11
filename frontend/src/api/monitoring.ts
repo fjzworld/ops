@@ -1,19 +1,34 @@
 import api from './client'
+import type { DashboardData } from '@/stores/dashboard'
+import type { MonitoringDashboardData } from '@/types/monitoring'
+
+export interface PrometheusValue {
+    time: number;
+    value: string;
+}
+
+export interface PrometheusResult {
+    status: string;
+    data: {
+        resultType: string;
+        result: Record<string, any>[];
+    };
+}
 
 export const monitoringApi = {
-    // Legacy dashboard (DB based)
+    // Dashboard (Service based)
     getDashboard() {
-        return api.get('/monitoring/dashboard')
+        return api.get<DashboardData>('/monitoring/dashboard')
     },
 
     // Prometheus Proxy: Instant query
     query(query: string, time?: number) {
-        return api.get('/monitoring/query', { params: { query, time } })
+        return api.get<PrometheusResult>('/monitoring/query', { params: { query, time } })
     },
 
     // Prometheus Proxy: Range query (for charts)
     queryRange(query: string, start: number, end: number, step: number = 60) {
-        return api.get('/monitoring/query_range', { 
+        return api.get<PrometheusValue[]>('/monitoring/query_range', { 
             params: { query, start, end, step } 
         })
     },

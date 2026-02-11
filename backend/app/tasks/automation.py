@@ -3,7 +3,7 @@ from celery import chord, group
 from app.core.database import SessionLocal
 from app.models.task import Task, TaskStatus, TaskExecution
 from app.models.resource import Resource
-from app.core.encryption import decrypt_string
+from app.services.credential_service import CredentialService
 from app.core.ssh import create_secure_client
 from datetime import datetime, timezone
 import logging
@@ -32,6 +32,8 @@ def _create_execution_history(db, task: Task, start_time: datetime):
 
 def _execute_ssh_script(resource: Resource, script_content: str) -> dict:
     ssh = create_secure_client()
+    # Explicitly set policy to handle containerized environments where known_hosts is missing
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     output_buffer = io.StringIO()
     exit_code = -1
     status = "failed"
@@ -39,13 +41,15 @@ def _execute_ssh_script(resource: Resource, script_content: str) -> dict:
     try:
         output_buffer.write(f"--- Resource: {resource.name} ({resource.ip_address}) ---\n")
         
-        password = decrypt_string(resource.ssh_password_enc)
+        # Use CredentialService to get resource credentials
+        credentials = CredentialService.get_ssh_credentials(resource)
         
         ssh.connect(
-            hostname=resource.ip_address,
-            port=resource.ssh_port or 22,
-            username=resource.ssh_username or 'root',
-            password=password,
+            hostname=credentials.host,
+            port=credentials.port,
+            username=credentials.username,
+            password=credentials.password,
+            pkey=paramiko.RSAKey.from_private_key(io.StringIO(credentials.private_key)) if credentials.private_key else None,
             timeout=CONNECT_TIMEOUT
         )
 

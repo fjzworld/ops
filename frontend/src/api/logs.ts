@@ -20,8 +20,9 @@ export interface LogQueryResult {
     data: {
         resultType: string
         result: {
-            metric: Record<string, string>
-            values: [number, string][]
+            stream?: Record<string, string>
+            metric?: Record<string, string>
+            values: [string, string][]
         }[]
     }
 }
@@ -29,21 +30,22 @@ export interface LogQueryResult {
 export const logApi = {
     // Query logs using LogQL
     queryLogs(params: LogQueryParams) {
-        return api.get('/logs/search', { params })
+        return api.get<LogQueryResult>('/logs/search', { params })
     },
 
     // Get available labels
     getLabels() {
-        return api.get('/logs/labels')
+        return api.get<{ status: string; data: string[] }>('/logs/labels')
     },
 
     // Get values for a specific label
     getLabelValues(name: string) {
-        return api.get(`/logs/label/${name}/values`)
+        return api.get<{ status: string; data: string[] }>(`/logs/label/${name}/values`)
     },
 
     // Deploy Promtail to a resource
-    deployPromtail(resourceId: number) {
-        return api.post(`/logs/deploy/${resourceId}`)
+    deployPromtail(resourceId: number, lokiHost?: string) {
+        const params = lokiHost ? { loki_host: lokiHost } : {}
+        return api.post<{ task_id: number; message: string; status: string }>(`/logs/deploy/${resourceId}`, null, { params })
     }
 }

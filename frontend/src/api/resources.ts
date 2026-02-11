@@ -1,54 +1,63 @@
 import api from './client'
+import { 
+    Resource, 
+    ResourceListParams, 
+    ResourceCreateRequest, 
+    ResourceUpdateRequest, 
+    ResourceDeleteRequest,
+    ResourceMetricsUpdate
+} from '@/types/resource'
 
 export const resourceApi = {
-    list(params?: any) {
-        return api.get('/resources', { params })
+    list(params?: ResourceListParams) {
+        return api.get<Resource[]>('/resources', { params })
     },
 
     get(id: number) {
-        return api.get(`/resources/${id}`)
+        return api.get<Resource>(`/resources/${id}`)
     },
 
-    create(data: any) {
-        return api.post('/resources', data)
+    create(data: ResourceCreateRequest) {
+        return api.post<Resource>('/resources', data)
     },
 
-    update(id: number, data: any) {
-        return api.put(`/resources/${id}`, data)
+    update(id: number, data: ResourceUpdateRequest) {
+        return api.put<Resource>(`/resources/${id}`, data)
     },
 
-    delete(id: number, deletePayload?: any) {
+    delete(id: number, deletePayload?: ResourceDeleteRequest) {
         if (deletePayload) {
-            return api.request({
+            return api.request<{ message: string; agent_uninstalled: boolean }>({
                 method: 'delete',
                 url: `/resources/${id}`,
                 data: deletePayload
             })
         }
-        return api.delete(`/resources/${id}`)
+        return api.delete<{ message: string; agent_uninstalled: boolean }>(`/resources/${id}`)
     },
 
-    updateMetrics(id: number, metrics: any) {
-        return api.post(`/resources/${id}/metrics`, metrics)
+    updateMetrics(id: number, metrics: ResourceMetricsUpdate) {
+        return api.post<void>(`/resources/${id}/metrics`, metrics)
     },
 
     getStats() {
-        return api.get('/resources/stats/summary')
+        return api.get<any>('/resources/stats/summary')
     },
 
-    probe(credentials: any) {
-        return api.post('/resources/probe', credentials)
+    probe(credentials: ResourceCreateRequest) {
+        return api.post<any>('/resources/probe', credentials)
     },
 
-    deployAgent(id: number, credentials: any) {
-        return api.post(`/resources/${id}/deploy-agent`, credentials)
+    deployAgent(id: number, credentials: ResourceCreateRequest) {
+        return api.post<{ message: string }>(`/resources/${id}/deploy-agent`, credentials)
     },
 
     getHistory(id: number, hours: number = 24) {
-        return api.get(`/resources/${id}/metrics/history`, { params: { hours } })
+        return api.get<any[]>(`/resources/${id}/metrics/history`, { params: { hours } })
     },
 
     getProcesses(id: number) {
-        return api.get(`/resources/${id}/processes`)
+        return api.get<any[]>(`/resources/${id}/processes`)
     }
 }
+

@@ -80,6 +80,11 @@ class ApiClient {
     delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
         return this.instance.delete(url, config)
     }
+
+    request<T = any>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+        return this.instance.request(config)
+    }
 }
+
 
 export default new ApiClient()

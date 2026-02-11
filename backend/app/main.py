@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
@@ -8,10 +9,20 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from app.core.database import engine, Base, AsyncSessionLocal, async_engine
+from app.core.exceptions import AppException
 from app.core.rate_limit import limiter
 from app.api.v1 import auth, users, resources, monitoring, alerts, automation, containers, middlewares, logs
 from app.services.scheduler import SchedulerService
 from app.models.task import Task
+
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -91,6 +102,32 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, exc: AppException):
+    """Handle application exceptions"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "code": exc.status_code,
+            "message": exc.message,
+            "details": exc.details
+        }
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors"""
+    return JSONResponse(
+        status_code=422,
+        content={
+            "code": 422,
+            "message": "Validation Error",
+            "details": exc.errors()
+        }
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler - 生产环境不暴露详细错误信息"""
@@ -104,12 +141,20 @@ async def global_exception_handler(request: Request, exc: Exception):
     if settings.DEBUG:
         return JSONResponse(
             status_code=500,
-            content={"detail": f"Internal server error: {str(exc)}"}
+            content={
+                "code": 500,
+                "message": f"Internal server error: {str(exc)}",
+                "details": {"trace": error_trace}
+            }
         )
     else:
         return JSONResponse(
             status_code=500,
-            content={"detail": "Internal server error"}
+            content={
+                "code": 500,
+                "message": "Internal server error",
+                "details": {}
+            }
         )
 
 

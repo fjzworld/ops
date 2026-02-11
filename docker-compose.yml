@@ -309,7 +309,7 @@ services:
     container_name: ops-loki
     user: "0"
     ports:
-      - "127.0.0.1:3100:3100"
+      - "${LOKI_PORT:-3100}:3100"
     volumes:
       - ./docker/loki-config.yaml:/etc/loki/local-config.yaml
       - loki_data:/loki

@@ -4,8 +4,8 @@
     <div class="glass-panel profile-header-card">
       <div class="ph-left">
         <div class="resource-icon">
-          <el-icon v-if="resource?.type === 'physical'"><Monitor /></el-icon>
-          <el-icon v-else-if="resource?.type === 'cloud'"><Cloudy /></el-icon>
+          <el-icon v-if="resource?.type === 'PHYSICAL'"><Monitor /></el-icon>
+          <el-icon v-else-if="resource?.type === 'CLOUD'"><Cloudy /></el-icon>
           <el-icon v-else><Platform /></el-icon>
         </div>
         <div class="ph-identity">
@@ -243,20 +243,25 @@ import {
 } from '@element-plus/icons-vue'
 import { resourceApi } from '@/api/resources'
 import { monitoringApi } from '@/api/monitoring'
+import type { Resource, DiskPartition, ResourceMetrics } from '@/types/resource'
 
 const route = useRoute()
 const router = useRouter()
 const resourceId = parseInt(route.params.id as string)
 
-const resource = ref<any>(null)
-const latestMetrics = ref<any>({})
-const diskPartitions = ref<any[]>([])
+const resource = ref<Resource | null>(null)
+const latestMetrics = ref<ResourceMetrics>({
+  cpu_usage: 0,
+  memory_usage: 0,
+  disk_usage: 0
+})
+const diskPartitions = ref<DiskPartition[]>([])
 const trendChartRef = ref<HTMLElement | null>(null)
 const networkChartRef = ref<HTMLElement | null>(null)
 const chartTimeRange = ref('1h')
 let chartInstance: echarts.ECharts | null = null
 let networkChartInstance: echarts.ECharts | null = null
-let pollTimer: any = null
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
 // --- Deploy Logic ---
 const showDeployDialog = ref(false)
@@ -282,7 +287,7 @@ const handleDeployClick = async () => {
   }
 
   // 1. Check if active
-  if (resource.value.status === 'active') {
+  if (resource.value.status === 'ACTIVE') {
     try {
       await ElMessageBox.confirm(
         '当前资源状态为"运行中"。若 Agent 已正常运行，无需重新部署。强制重装可能会导致监控短暂中断。确定要继续吗？',
@@ -338,9 +343,13 @@ const deployWithSavedCredentials = async () => {
     await resourceApi.deployAgent(resourceId, payload)
     ElMessage.success('Agent 部署任务已下发')
     setTimeout(loadResource, 2000)
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e)
-    const msg = e.response?.data?.detail || '部署失败'
+    let msg = '部署失败'
+    if (e && typeof e === 'object' && 'response' in e) {
+        const error = e as { response: { data: { detail: string } } }
+        msg = error.response?.data?.detail || msg
+    }
     ElMessage.error(msg)
   } finally {
     deploying.value = false
@@ -352,7 +361,7 @@ const handleDeploy = async () => {
   try {
     const backendUrl = `${window.location.origin}/api/v1`
     const payload = {
-        ip_address: resource.value.ip_address,
+        ip_address: resource.value?.ip_address,
         ...deployForm,
         backend_url: backendUrl
     }
@@ -360,9 +369,13 @@ const handleDeploy = async () => {
     ElMessage.success('Agent 部署任务已下发')
     showDeployDialog.value = false
     setTimeout(loadResource, 2000) // Reload status after delay
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e)
-    const msg = e.response?.data?.detail || '部署失败'
+    let msg = '部署失败'
+    if (e && typeof e === 'object' && 'response' in e) {
+        const error = e as { response: { data: { detail: string } } }
+        msg = error.response?.data?.detail || msg
+    }
     ElMessage.error(msg)
   } finally {
     deploying.value = false
@@ -664,9 +677,9 @@ const refreshData = () => {
 
 // --- Helpers ---
 
-const getStatusType = (status: string) => status === 'active' ? 'success' : 'danger'
-const getStatusLabel = (status: string) => ({ active: '运行中', offline: '离线', maintenance: '维护' }[status] || status)
-const getResourceTypeLabel = (type: string) => ({ physical: '物理机', virtual: '虚拟机', cloud: '云主机' }[type] || type)
+const getStatusType = (status: string) => status === 'ACTIVE' ? 'success' : 'danger'
+const getStatusLabel = (status: string) => ({ ACTIVE: '运行中', OFFLINE: '离线', MAINTENANCE: '维护' }[status] || status)
+const getResourceTypeLabel = (type: string) => ({ PHYSICAL: '物理机', VIRTUAL: '虚拟机', CLOUD: '云主机' }[type] || type)
 const formatPercent = (val: number) => val ? val.toFixed(1) : '0.0'
 const formatBytes = (bytes: number) => {
   if (!bytes) return '0 B'

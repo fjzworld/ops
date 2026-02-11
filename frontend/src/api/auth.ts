@@ -10,6 +10,21 @@ export interface RegisterData {
     email: string
     password: string
     full_name?: string
+    role?: string
+}
+
+export interface Token {
+    access_token: string
+    token_type: string
+}
+
+export interface User {
+    id: number
+    username: string
+    email: string
+    full_name: string
+    role: string
+    is_active: boolean
 }
 
 export const authApi = {
@@ -19,20 +34,21 @@ export const authApi = {
         params.append('username', data.username)
         params.append('password', data.password)
 
-        return api.post('/auth/login', params.toString(), {
+        return api.post<Token>('/auth/login', params.toString(), {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         })
     },
 
     register(data: RegisterData) {
-        return api.post('/auth/register', data)
+        return api.post<User>('/auth/register', data)
     },
 
     getCurrentUser() {
-        return api.get('/auth/me')
+        return api.get<User>('/auth/me')
     },
 
     logout() {
-        return api.post('/auth/logout')
+        return api.post<{ message: string }>('/auth/logout')
     }
 }
+

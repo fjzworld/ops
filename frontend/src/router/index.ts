@@ -68,12 +68,7 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/Middleware/MiddlewareDetail.vue'),
                 meta: { roles: ['admin', 'operator', 'user', 'readonly'] }
             },
-            {
-                path: 'monitoring',
-                name: 'Monitoring',
-                component: () => import('@/views/Monitoring/MonitoringDashboard.vue'),
-                meta: { roles: ['admin', 'operator', 'user', 'readonly'] }
-            },
+
             {
                 path: 'alerts',
                 name: 'Alerts',

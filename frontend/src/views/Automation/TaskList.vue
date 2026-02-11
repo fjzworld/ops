@@ -131,12 +131,13 @@ import { Plus, Search, Edit, Delete, VideoPlay, Clock } from '@element-plus/icon
 import { automationApi } from '@/api/automation'
 import dayjs from 'dayjs'
 import TaskFormDialog from './components/TaskFormDialog.vue'
+import type { Task } from '@/types/automation'
 
 const loading = ref(false)
 const executingId = ref<number | null>(null)
-const tasks = ref<any[]>([])
+const tasks = ref<Task[]>([])
 const showCreateDialog = ref(false)
-const editingTask = ref<any>(null)
+const editingTask = ref<Task | null>(null)
 
 const filters = reactive({ name: '', type: '' })
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
@@ -180,12 +181,12 @@ const openCreateDialog = () => {
   showCreateDialog.value = true
 }
 
-const handleEdit = (row: any) => {
+const handleEdit = (row: Task) => {
   editingTask.value = row
   showCreateDialog.value = true
 }
 
-const handleDelete = (row: any) => {
+const handleDelete = (row: Task) => {
   ElMessageBox.confirm(`确定要删除任务 "${row.name}" 吗?`, '警告', {
     confirmButtonText: '删除',
     cancelButtonText: '取消',
@@ -201,7 +202,7 @@ const handleDelete = (row: any) => {
   })
 }
 
-const handleExecute = async (row: any) => {
+const handleExecute = async (row: Task) => {
   executingId.value = row.id
   try {
     await automationApi.execute(row.id)

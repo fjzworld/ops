@@ -21,10 +21,7 @@
           <el-icon><Coin /></el-icon>
           <span>中间件管理</span>
         </el-menu-item>
-        <el-menu-item index="/monitoring">
-          <el-icon><Monitor /></el-icon>
-          <span>监控中心</span>
-        </el-menu-item>
+
         <el-menu-item index="/automation">
           <el-icon><Cpu /></el-icon>
           <span>自动化运维</span>
@@ -79,7 +76,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { DataLine, Monitor, Bell, User, Box, Coin, Cpu, Document } from '@element-plus/icons-vue'
+import { DataLine, Bell, User, Box, Coin, Cpu, Document } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -94,7 +91,7 @@ const pageTitle = computed(() => {
     '/middlewares': '中间件管理',
     '/automation': '自动化运维',
     '/logs': '日志中心',
-    '/monitoring': '监控中心',
+
     '/alerts': '告警列表',
     '/alerts/rules': '告警规则'
   }

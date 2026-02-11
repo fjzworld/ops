@@ -15,16 +15,16 @@
       <!-- Filters -->
       <div class="filter-bar">
         <el-select v-model="filters.type" placeholder="资源类型" clearable class="glass-input" style="width: 140px">
-          <el-option label="物理机" value="physical" />
-          <el-option label="虚拟机" value="virtual" />
-          <el-option label="容器" value="container" />
-          <el-option label="云主机" value="cloud" />
+          <el-option label="物理机" value="PHYSICAL" />
+          <el-option label="虚拟机" value="VIRTUAL" />
+          <el-option label="容器" value="CONTAINER" />
+          <el-option label="云主机" value="CLOUD" />
         </el-select>
         <el-select v-model="filters.status" placeholder="状态" clearable class="glass-input" style="width: 120px">
-          <el-option label="活跃" value="active" />
-          <el-option label="非活跃" value="inactive" />
-          <el-option label="维护中" value="maintenance" />
-          <el-option label="离线" value="offline" />
+          <el-option label="活跃" value="ACTIVE" />
+          <el-option label="非活跃" value="INACTIVE" />
+          <el-option label="维护中" value="MAINTENANCE" />
+          <el-option label="离线" value="OFFLINE" />
         </el-select>
         <el-button type="primary" plain @click="loadResources" class="glass-button">
           <el-icon><Search /></el-icon> 查询
@@ -182,9 +182,9 @@
         
         <el-form-item label="资源类型">
           <el-radio-group v-model="resourceForm.type" size="small">
-            <el-radio-button label="physical">物理机</el-radio-button>
-            <el-radio-button label="virtual">虚拟机</el-radio-button>
-            <el-radio-button label="cloud">云主机</el-radio-button>
+            <el-radio-button label="PHYSICAL">物理机</el-radio-button>
+            <el-radio-button label="VIRTUAL">虚拟机</el-radio-button>
+            <el-radio-button label="CLOUD">云主机</el-radio-button>
           </el-radio-group>
         </el-form-item>
         
@@ -245,13 +245,14 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, MoreFilled, Edit, Delete, Box } from '@element-plus/icons-vue'
 import { resourceApi } from '@/api/resources'
+import type { Resource } from '@/types/resource'
 
 const router = useRouter()
 const loading = ref(false)
 const saving = ref(false)
-const resources = ref<any[]>([])
+const resources = ref<Resource[]>([])
 const showCreateDialog = ref(false)
-const editingResource = ref<any>(null)
+const editingResource = ref<Resource | null>(null)
 const authMethod = ref('password')
 
 const filters = reactive({ type: '', status: '' })
@@ -259,7 +260,7 @@ const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 
 const resourceForm = reactive({
   name: '',
-  type: 'physical',
+  type: 'PHYSICAL',
   ip_address: '',
   ssh_port: 22,
   ssh_username: 'root',
@@ -273,15 +274,15 @@ const resourceForm = reactive({
 })
 
 const typeLabels: Record<string, string> = {
-  physical: '物理机', virtual: '虚拟机', container: '容器', cloud: '云主机'
+  PHYSICAL: '物理机', VIRTUAL: '虚拟机', CONTAINER: '容器', CLOUD: '云主机'
 }
 
 const statusLabels: Record<string, string> = {
-  active: '活跃', inactive: '休眠', maintenance: '维护', offline: '离线'
+  ACTIVE: '活跃', INACTIVE: '休眠', MAINTENANCE: '维护', OFFLINE: '离线'
 }
 
 const getTypeTagEffect = (type: string) => {
-  return type === 'physical' ? 'danger' : type === 'cloud' ? 'success' : 'info'
+  return type === 'PHYSICAL' ? 'danger' : type === 'CLOUD' ? 'success' : 'info'
 }
 
 const getProgressColor = (percentage: number) => {
@@ -306,10 +307,13 @@ const loadResources = async () => {
       ...(filters.type && { resource_type: filters.type }),
       ...(filters.status && { status: filters.status })
     }
-    const { data } = await resourceApi.list(params)
+    const res = await resourceApi.list(params)
+    // Extract array from AxiosResponse
+    const data = res.data
     resources.value = data
     pagination.total = data.length
   } catch (error) {
+    console.error('Resource load error:', error)
     ElMessage.error('数据加载异常')
   } finally {
     loading.value = false
@@ -318,7 +322,7 @@ const loadResources = async () => {
 
 const resetForm = () => {
   resourceForm.name = ''
-  resourceForm.type = 'physical'
+  resourceForm.type = 'PHYSICAL'
   resourceForm.ip_address = ''
   resourceForm.ssh_port = 22
   resourceForm.ssh_username = 'root'
@@ -334,7 +338,7 @@ const openCreateDialog = () => {
   showCreateDialog.value = true
 }
 
-const handleEdit = (row: any) => {
+const handleEdit = (row: Resource) => {
   editingResource.value = row
   Object.assign(resourceForm, {
     name: row.name,
@@ -382,7 +386,7 @@ const handleSave = async () => {
   }
 }
 
-const handleDelete = (row: any) => {
+const handleDelete = (row: Resource) => {
   ElMessageBox.confirm(`确定要删除资源 "${row.name}" 吗?`, '警告', {
     confirmButtonText: '删除',
     cancelButtonText: '取消',
@@ -502,9 +506,9 @@ onMounted(loadResources)
   background: #cbd5e1;
 }
 
-.dot.active { background: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
-.dot.maintenance { background: #eab308; }
-.dot.offline { background: #ef4444; }
+.dot.ACTIVE { background: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
+.dot.MAINTENANCE { background: #eab308; }
+.dot.OFFLINE { background: #ef4444; }
 
 .status-text {
   font-size: 13px;

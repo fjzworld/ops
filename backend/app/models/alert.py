@@ -1,21 +1,24 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, JSON, DateTime, Enum as SQLEnum, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from app.core.database import Base
 import enum
 
 
 class AlertSeverity(str, enum.Enum):
     """Alert severity levels"""
-    CRITICAL = "critical"
-    WARNING = "warning"
-    INFO = "info"
+    CRITICAL = "CRITICAL"
+    WARNING = "WARNING"
+    INFO = "INFO"
 
 
 class AlertStatus(str, enum.Enum):
     """Alert status"""
-    FIRING = "firing"
-    RESOLVED = "resolved"
-    ACKNOWLEDGED = "acknowledged"
+    FIRING = "FIRING"
+    RESOLVED = "RESOLVED"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+
 
 
 class AlertRule(Base):
@@ -62,6 +65,9 @@ class Alert(Base):
     message = Column(String(1000))
     current_value = Column(Float)
     threshold_value = Column(Float)
+    
+    resource = relationship("Resource", back_populates="alerts")
+
     
     # Metadata
     labels = Column(JSON, default=dict)

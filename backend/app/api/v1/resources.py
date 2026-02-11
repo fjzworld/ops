@@ -1,11 +1,13 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
+from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from datetime import datetime, timedelta
 from app.core.database import get_async_db
+from app.core.exceptions import NotFoundException, BadRequestException, PermissionDeniedException, InternalServerError
 from app.models.user import User
 from app.models.resource import Resource, ResourceType, ResourceStatus
 from app.schemas.resource import (
@@ -16,21 +18,13 @@ from app.schemas.resource import (
 from app.api.v1.auth import get_current_active_user
 from app.services.resource_detector import probe_server, SSHCredentials
 from app.services.agent_deployer import deploy_agent, uninstall_agent
+from app.services.credential_service import CredentialService
 from app.core.security import create_access_token
 from app.core.encryption import encrypt_string
 from app.core.monitoring import update_metrics, clear_metrics, update_resource_status
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-
-def _build_ssh_credentials(ip_address: str, port: int, username: str, password: Optional[str] = None, private_key: Optional[str] = None) -> SSHCredentials:
-    return SSHCredentials(
-        host=ip_address,
-        port=port,
-        username=username or "root",
-        password=password,
-        private_key=private_key
-    )
 
 router = APIRouter()
 
@@ -45,6 +39,7 @@ async def list_resources(
     db: AsyncSession = Depends(get_async_db)
 ):
     """List all resources"""
+    logger.info(f"LIST_RESOURCES_START: user={current_user.username}, type={resource_type}, status={status}")
     query = select(Resource)
     
     if resource_type:
@@ -54,8 +49,11 @@ async def list_resources(
         query = query.filter(Resource.status == status)
     
     query = query.offset(skip).limit(limit)
+    
     result = await db.execute(query)
     resources = result.scalars().all()
+    
+    logger.info(f"LIST_RESOURCES_END: found {len(resources)} items")
     
     # Set has_credentials flag for all resources
     for res in resources:
@@ -71,12 +69,18 @@ async def get_resource(
     db: AsyncSession = Depends(get_async_db)
 ):
     """Get resource by ID"""
-    resource = await db.get(Resource, resource_id)
+    # Optimization: Verified that ResourceInDB schema does not include relationships.
+    # Resource.metrics is historical data and should not be loaded unless requested.
+    # Resource.alert_rules relationship does not exist on the model.
+    # query = select(Resource).options(selectinload(Resource.metrics)).where(Resource.id == resource_id)
+    
+    result = await db.execute(
+        select(Resource)
+        .filter(Resource.id == resource_id)
+    )
+    resource = result.scalars().first()
     if not resource:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Resource not found"
-        )
+        raise NotFoundException(message="Resource not found")
     
     # Set has_credentials flag
     resource.has_credentials = bool(resource.ssh_password_enc or resource.ssh_private_key_enc)
@@ -100,10 +104,7 @@ async def create_resource(
     # Check if resource name already exists
     result = await db.execute(select(Resource).filter(Resource.name == resource_data.name))
     if result.scalars().first():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Resource name already exists"
-        )
+        raise BadRequestException(message="Resource name already exists")
     
     # Check if we should perform auto-discovery
     auto_discovery = False
@@ -114,7 +115,7 @@ async def create_resource(
         try:
             # 1. Probe Server
             logger.info(f"Auto-probing server: {resource_data.ip_address}")
-            credentials = _build_ssh_credentials(
+            credentials = CredentialService.build_ssh_credentials(
                 ip_address=resource_data.ip_address,
                 port=resource_data.ssh_port,
                 username=resource_data.ssh_username,
@@ -137,10 +138,7 @@ async def create_resource(
             
         except Exception as e:
             # If probing fails, we abort creation because the credentials might be wrong
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Server connection failed: {str(e)}"
-            )
+            raise BadRequestException(message=f"Server connection failed: {str(e)}")
 
     # Prepare DB object
     db_resource_dict = resource_data.dict(exclude={
@@ -178,7 +176,7 @@ async def create_resource(
             
             success = await run_in_threadpool(
                 deploy_agent,
-                credentials=credentials,
+                credentials=credentials, # type: ignore
                 resource_id=db_resource.id,
                 api_token=api_token,
                 backend_url=backend_url
@@ -205,10 +203,7 @@ async def update_resource(
     """Update resource"""
     resource = await db.get(Resource, resource_id)
     if not resource:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Resource not found"
-        )
+        raise NotFoundException(message="Resource not found")
     
     # Update fields
     update_data = resource_update.dict(exclude_unset=True)
@@ -235,17 +230,11 @@ async def delete_resource(
     from the remote server before deleting the resource from the database.
     """
     if current_user.role not in ["admin", "operator"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
+        raise PermissionDeniedException(message="Not enough permissions")
     
     resource = await db.get(Resource, resource_id)
     if not resource:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Resource not found"
-        )
+        raise NotFoundException(message="Resource not found")
     
     # Try to uninstall agent if requested and credentials provided
     agent_uninstalled = False
@@ -256,7 +245,7 @@ async def delete_resource(
     if delete_request and delete_request.uninstall_agent and resource.ip_address:
         logger.info(f"准备卸载 Agent: host={resource.ip_address}, user={delete_request.ssh_username}")
         try:
-            credentials = _build_ssh_credentials(
+            credentials = CredentialService.build_ssh_credentials(
                 ip_address=resource.ip_address,
                 port=delete_request.ssh_port,
                 username=delete_request.ssh_username,
@@ -291,7 +280,7 @@ async def delete_resource(
     await db.execute(delete(Metric).where(Metric.resource_id == resource_id))
     await db.execute(delete(ProcessMetric).where(ProcessMetric.resource_id == resource_id))
     
-    db.delete(resource)
+    await db.delete(resource)
     await db.commit()
     
     response = {
@@ -317,10 +306,7 @@ async def update_resource_metrics(
     
     resource = await db.get(Resource, resource_id)
     if not resource:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Resource not found"
-        )
+        raise NotFoundException(message="Resource not found")
     
     # Update current metrics on resource
     resource.cpu_usage = metrics.cpu_usage
@@ -421,10 +407,7 @@ async def get_metrics_history(
     
     resource = await db.get(Resource, resource_id)
     if not resource:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Resource not found"
-        )
+        raise NotFoundException(message="Resource not found")
     
     # Query metrics from last N hours
     since = datetime.utcnow() - timedelta(hours=hours)
@@ -530,7 +513,7 @@ async def probe_resource(
     Returns: CPU cores, memory, disk, OS info
     """
     try:
-        credentials = _build_ssh_credentials(
+        credentials = CredentialService.build_ssh_credentials(
             ip_address=probe_request.ip_address,
             port=probe_request.ssh_port,
             username=probe_request.ssh_username,
@@ -551,15 +534,9 @@ async def probe_resource(
             kernel_version=server_info.kernel_version
         )
     except ConnectionError as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"SSH连接失败: {str(e)}"
-        )
+        raise InternalServerError(message=f"SSH连接失败: {str(e)}")
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"探测失败: {str(e)}"
-        )
+        raise InternalServerError(message=f"探测失败: {str(e)}")
 
 
 @router.post("/{resource_id}/deploy-agent", response_model=MessageResponse)
@@ -576,10 +553,7 @@ async def deploy_monitoring_agent(
     # Verify resource exists
     resource = await db.get(Resource, resource_id)
     if not resource:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Resource not found"
-        )
+        raise NotFoundException(message="Resource not found")
     
     try:
         # Check if we should use stored credentials
@@ -587,26 +561,16 @@ async def deploy_monitoring_agent(
         private_key = probe_request.ssh_private_key
         
         if not password and not private_key:
-            # Try to decrypt stored credentials
-            from app.core.encryption import decrypt_string
-            if resource.ssh_password_enc:
-                try:
-                    password = decrypt_string(resource.ssh_password_enc)
-                except:
-                    pass
-            if resource.ssh_private_key_enc:
-                try:
-                    private_key = decrypt_string(resource.ssh_private_key_enc)
-                except:
-                    pass
-                    
-        credentials = _build_ssh_credentials(
-            ip_address=probe_request.ip_address,
-            port=probe_request.ssh_port,
-            username=probe_request.ssh_username,
-            password=password,
-            private_key=private_key
-        )
+            # Use CredentialService to get stored credentials
+            credentials = CredentialService.get_ssh_credentials(resource)
+        else:
+            credentials = CredentialService.build_ssh_credentials(
+                ip_address=probe_request.ip_address,
+                port=probe_request.ssh_port,
+                username=probe_request.ssh_username,
+                password=password,
+                private_key=private_key
+            )
         
         # Deploy agent
         # Generate a long-lived token for the agent (10 years)
@@ -634,12 +598,6 @@ async def deploy_monitoring_agent(
             
             return {"message": "Monitoring agent deployed successfully"}
         else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Agent deployment failed"
-            )
+            raise InternalServerError(message="Agent deployment failed")
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"部署失败: {str(e)}"
-        )
+        raise InternalServerError(message=f"部署失败: {str(e)}")

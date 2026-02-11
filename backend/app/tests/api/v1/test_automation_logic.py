@@ -33,10 +33,18 @@ def db():
         Base.metadata.drop_all(bind=engine)
 
 @patch("paramiko.SSHClient")
-@patch("app.tasks.automation.decrypt_string")
-def test_run_automation_task_logic(mock_decrypt, mock_ssh_client, db):
+@patch("app.tasks.automation.CredentialService")
+def test_run_automation_task_logic(mock_credential_service, mock_ssh_client, db):
     # 1. Setup Mock
-    mock_decrypt.return_value = "decrypted_password"
+    mock_creds = MagicMock()
+    mock_creds.host = "1.2.3.4"
+    mock_creds.port = 22
+    mock_creds.username = "root"
+    mock_creds.password = "decrypted_password"
+    mock_creds.private_key = None
+    
+    mock_credential_service.get_ssh_credentials.return_value = mock_creds
+
     mock_ssh = MagicMock()
     mock_ssh_client.return_value = mock_ssh
     

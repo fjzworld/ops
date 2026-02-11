@@ -7,18 +7,19 @@ import enum
 
 class ResourceType(str, enum.Enum):
     """Resource type enumeration"""
-    PHYSICAL = "physical"
-    VIRTUAL = "virtual"
-    CONTAINER = "container"
-    CLOUD = "cloud"
+    PHYSICAL = "PHYSICAL"
+    VIRTUAL = "VIRTUAL"
+    CONTAINER = "CONTAINER"
+    CLOUD = "CLOUD"
 
 
 class ResourceStatus(str, enum.Enum):
     """Resource status enumeration"""
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    MAINTENANCE = "maintenance"
-    OFFLINE = "offline"
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    MAINTENANCE = "MAINTENANCE"
+    OFFLINE = "OFFLINE"
+
 
 
 class Resource(Base):
@@ -60,6 +61,7 @@ class Resource(Base):
     
     # Relationships
     metrics = relationship("Metric", back_populates="resource", cascade="all, delete-orphan")
+    alerts = relationship("Alert", back_populates="resource", cascade="all, delete-orphan")
     
     # SSH Credentials (Encrypted)
     ssh_port = Column(Integer, default=22)

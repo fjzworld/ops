@@ -98,20 +98,28 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { Refresh, Cpu, Connection, Coin, Top } from '@element-plus/icons-vue'
 import { monitoringApi } from '@/api/monitoring'
+import type { MonitoringDashboardData } from '@/types/monitoring'
+import { ElMessage } from 'element-plus'
 
-const dashboardData = ref<any>({})
+const dashboardData = ref<MonitoringDashboardData>({
+  average_cpu_usage: 0,
+  average_memory_usage: 0,
+  average_disk_usage: 0,
+  top_cpu_resources: []
+})
 const loading = ref(false)
 const lastUpdated = ref('')
-let timer: any = null
+let timer: ReturnType<typeof setInterval> | null = null
 
 const loadData = async () => {
   loading.value = true
   try {
-    const { data } = await monitoringApi.getDashboard()
-    dashboardData.value = data
+    const res = await monitoringApi.getDashboard()
+    dashboardData.value = res.data
     lastUpdated.value = new Date().toLocaleTimeString()
   } catch (error) {
     console.error('Failed to load monitoring data:', error)
+    ElMessage.error('获取监控数据失败')
   } finally {
     loading.value = false
   }

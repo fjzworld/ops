@@ -6,7 +6,7 @@
     </div>
 
     <!-- 1. Top Status Overview -->
-    <StatusOverview :data="dashboardData.summary || {}" />
+    <StatusOverview :data="dashboardStore.data.summary" />
 
     <!-- 2. Middle Charts Section -->
     <div class="charts-grid">
@@ -18,12 +18,12 @@
             <span class="subtitle">点击节点查看详情</span>
           </h3>
         </div>
-        <HexGrid :nodes="dashboardData.all_nodes || []" />
+        <HexGrid :nodes="dashboardStore.data.all_nodes" />
       </div>
       
       <!-- Right: Critical Nodes -->
       <CriticalNodesList 
-        :nodes="dashboardData.top_nodes || []" 
+        :nodes="dashboardStore.data.top_nodes" 
       />
     </div>
 
@@ -83,24 +83,17 @@ import { Plus, VideoPlay, Bell, Document, Grid } from '@element-plus/icons-vue'
 import StatusOverview from '@/components/StatusOverview.vue'
 import HexGrid from '@/components/HexGrid.vue'
 import CriticalNodesList from '@/components/CriticalNodesList.vue'
-import { monitoringApi } from '@/api/monitoring'
+import { useDashboardStore } from '@/stores/dashboard'
 
-const dashboardData = ref<any>({})
+const dashboardStore = useDashboardStore()
 const currentDate = new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-let timer: any = null
-
-const loadData = async () => {
-  try {
-    const res = await monitoringApi.getDashboard()
-    dashboardData.value = res.data
-  } catch (error) {
-    console.error('Failed to load dashboard data:', error)
-  }
-}
+let timer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
-  loadData()
-  timer = setInterval(loadData, 10000)
+  dashboardStore.fetchDashboardData()
+  timer = setInterval(() => {
+    dashboardStore.fetchDashboardData()
+  }, 10000)
 })
 
 onUnmounted(() => {

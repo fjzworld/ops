@@ -1,35 +1,43 @@
 import api from './client'
+import type { Task, TaskExecution } from '@/types/automation'
+
+export interface TaskListParams {
+    skip?: number;
+    limit?: number;
+    name?: string;
+    type?: string;
+}
 
 export const automationApi = {
-    list(params?: any) {
-        return api.get('/automation/tasks', { params })
+    list(params?: TaskListParams) {
+        return api.get<Task[]>('/automation/tasks', { params })
     },
 
     get(id: number) {
-        return api.get(`/automation/tasks/${id}`)
+        return api.get<Task>(`/automation/tasks/${id}`)
     },
 
-    create(data: any) {
-        return api.post('/automation/tasks', data)
+    create(data: Partial<Task>) {
+        return api.post<Task>('/automation/tasks', data)
     },
 
-    update(id: number, data: any) {
-        return api.put(`/automation/tasks/${id}`, data)
+    update(id: number, data: Partial<Task>) {
+        return api.put<Task>(`/automation/tasks/${id}`, data)
     },
 
     delete(id: number) {
-        return api.delete(`/automation/tasks/${id}`)
+        return api.delete<void>(`/automation/tasks/${id}`)
     },
 
     execute(id: number) {
-        return api.post(`/automation/tasks/${id}/execute`)
+        return api.post<{ message: string; task_id: number }>(`/automation/tasks/${id}/execute`)
     },
 
     getExecutions(taskId: number) {
-        return api.get(`/automation/tasks/${taskId}/executions`)
+        return api.get<TaskExecution[]>(`/automation/tasks/${taskId}/executions`)
     },
 
     getExecutionDetails(executionId: number) {
-        return api.get(`/automation/executions/${executionId}`)
+        return api.get<TaskExecution>(`/automation/executions/${executionId}`)
     }
 }

@@ -60,10 +60,10 @@ class ResourceDetector:
         self.client: Optional[paramiko.SSHClient] = None
     
     def connect(self) -> None:
-        """Establish SSH connection with improved host key verification"""
+        """Establish SSH connection"""
         self.client = paramiko.SSHClient()
-        # Use logging policy instead of AutoAddPolicy for better security auditing
-        self.client.set_missing_host_key_policy(LoggingMissingHostKeyPolicy())
+        # Ensure we can connect to new resources in this environment
+        self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         
         try:
             if self.credentials.private_key:
