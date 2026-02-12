@@ -2,29 +2,63 @@
 
 现代化的企业级运维管理平台,提供资源管理、监控告警、自动化运维等核心功能。
 
+## 核心理念 (Core Philosophy)
+
+*   **简洁至上**：恪守KISS原则，关注核心运维价值，拒绝臃肿。
+*   **极致视觉**：基于现代化暗黑美学设计，提供沉浸式的指挥中心体验。
+*   **即插即用**：通过一键部署 Agent (Alloy)，分钟级完成监控接入。
+
+## 架构概览 (Architecture)
+
+```mermaid
+graph TD
+    User((管理员/运维)) -->|HTTPS| Nginx[Nginx 反向代理]
+    Nginx -->|SPA| Frontend[Vue 3 Frontend]
+    Nginx -->|API| Backend[FastAPI Backend]
+    
+    subgraph "Core Services"
+        Backend -->|Async| DB[(PostgreSQL)]
+        Backend -->|Cache/Queue| Redis[(Redis)]
+        Backend -->|Task Execution| Celery[Celery Worker]
+    end
+    
+    subgraph "Observability Space"
+        Backend -->|Deploy| Agent[Grafana Alloy Agent]
+        Agent -->|Push Metrics| Prometheus[(Prometheus)]
+        Agent -->|Push Logs| Loki[(Loki)]
+        Prometheus -->|Visual| Grafana[Grafana Dashboard]
+        Loki -->|Visual| Grafana
+    end
+    
+    Frontend -->|Query Trends| Backend
+    Backend -->|Query Data| Prometheus
+    Backend -->|Query Logs| Loki
+```
+
 ## 技术栈
 
 ### 后端
 - **FastAPI** - 高性能异步 Web 框架
 - **PostgreSQL** - 关系型数据库
-- **Redis** - 缓存和消息队列
-- **Celery** - 分布式任务队列
-- **SQLAlchemy** - ORM
-- **Prometheus** - 监控指标采集
+- **Redis** - 缓存、Celery 代理及消息队列
+- **Celery** - 分布式异步任务队列及定时调度
+- **SQLAlchemy** - 异步 ORM 支持
+- **Prometheus** - 监控指标存储与查询
+- **Grafana Loki** - 日志聚合与检索中心
 
 ### 前端
-- **Vue 3** - 渐进式 JavaScript 框架
-- **TypeScript** - 类型安全
-- **Element Plus** - UI 组件库
-- **Vite** - 构建工具
-- **ECharts** - 数据可视化
-- **Pinia** - 状态管理
+- **Vue 3** - 组合式 API 开发
+- **TypeScript** - 严谨的类型系统
+- **Element Plus** - 深度定制的暗黑视觉组件库
+- **Vite** - 极速构建与开发体验
+- **ECharts** - 动态性能趋势图
+- **Pinia** - 响应式状态管理
 
 ### 基础设施
-- **Docker** - 容器化
-- **Docker Compose** - 容器编排
-- **Nginx** - 反向代理
-- **Grafana** - 可视化监控
+- **Docker & Docker Compose** - 容器化部署与编排
+- **Nginx** - 静态资源分发与高性能反向代理
+- **Grafana Alloy** - 下一代集成监控/日志采集 Agent
+- **Grafana** - 专业的数据可视化面板
 
 ## 快速开始
 
@@ -52,11 +86,22 @@ docker-compose logs -f
 ```
 
 服务访问地址:
-- 前端: http://localhost
-- 后端 API: http://localhost:8000
-- API 文档: http://localhost:8000/api/docs
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3000 (admin/admin)
+- **控制台 (Frontend)**: http://localhost
+- **后端接口 (API)**: http://localhost:8000
+- **交互文档 (Swagger)**: http://localhost:8000/api/docs
+- **时间序列 (Prometheus)**: http://localhost/prometheus
+- **数据可视化 (Grafana)**: http://localhost:3000 (admin/admin)
+
+## 系统配置 (.env)
+
+| 变量名 | 描述 | 默认值/示例 |
+| :--- | :--- | :--- |
+| `EXTERNAL_API_URL` | 后端对外的基础 URL (用于 Agent 回传) | `http://<SSH_IP>:8000` |
+| `LOKI_URL` | 内部 Loki 地址 | `http://loki:3100` |
+| `LOKI_EXTERNAL_URL` | Agent 可达的外部 Loki 地址 | `http://<NGINX_IP>:3100` |
+| `CORS_ORIGINS` | 跨域允许列表 (逗号分隔) | `http://localhost:5173,...` |
+| `POSTGRES_DB` | 数据库名称 | `ops_platform` |
+| `DEBUG` | 调试模式 (显示详细报错栈) | `false` |
 
 ### 本地开发
 
@@ -113,10 +158,19 @@ ops-platform/
 │   │   ├── stores/     # 状态管理
 │   │   └── views/      # 页面
 │   └── package.json
-├── docker/             # Docker 配置
-├── monitoring/         # 监控配置
-└── docker-compose.yml
+├── docker/             # Dockerfile 及服务配置 (Nginx/Loki/Prometheus)
+├── monitoring/         # 监控配置文件 (Alert Rules)
+├── templates/          # 自动化部署脚本模板 (Alloy/Promtail)
+└── docker-compose.yml  # 容器编排主文件
 ```
+
+## 设计美学 (Design Aesthetics)
+
+项目深度集成了现代 Web 设计规范，打造“指挥中心”级别的视觉体验：
+*   **玻璃拟态 (Glassmorphism)**：大量应用背景模糊与半透明层级，提升空间感。
+*   **动态背光 (Ambient Light)**：登录页及 Dashboard 带有呼吸感的环境光效。
+*   **Fira Code 字体**：针对运维场景优化的等宽字体显示。
+*   **微交互驱动**：所有按钮及卡片均具有平滑的状态转换动画。
 
 ## 核心功能
 
@@ -140,15 +194,16 @@ ops-platform/
 - ✅ 告警历史管理
 
 ### 4. 自动化运维
-- ⏳ 脚本管理
-- ⏳ 定时任务调度
-- ⏳ 批量操作执行
-- ⏳ CI/CD 集成
+- ✅ 脚本仓库管理 (Shell/Python/Ansible)
+- ✅ 远程任务异步分发与执行
+- ✅ 任务执行日志实时追踪
+- ✅ 定时维护任务调度
 
 ### 5. 日志与故障排查
-- ⏳ 日志集中采集
-- ⏳ 日志分析可视化
-- ⏳ 故障定位工具
+- ✅ 基于 Loki 的日志集中采集
+- ✅ 自动化 Agent (Alloy) 一键部署
+- ✅ 日志关键词快速搜索与聚合分析
+- ✅ 故障定位时间轴视图
 
 ## 默认账号
 
@@ -182,19 +237,19 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 ## 监控
 
 ### Prometheus 指标
+访问 http://localhost/prometheus (生产) 或查看后端 `/metrics`。
 
-访问 http://localhost:8000/metrics 查看应用指标
+项目采用 **Grafana Alloy** 作为唯一数据采集端,支持一键部署到目标服务器,自动采集以下核心指标:
+- `node_cpu_seconds_total` - CPU 利用率(按核心/状态)
+- `node_memory_MemTotal_bytes` - 内存使用详情
+- `node_network_receive_bytes_total` - 实时带宽流量
+- `node_filesystem_size_bytes` - 磁盘分区占用
 
-主要指标:
-- `resource_cpu_usage_percent` - 资源 CPU 使用率
-- `resource_memory_usage_percent` - 资源内存使用率
-- `resource_disk_usage_percent` - 资源磁盘使用率
-- `total_resources` - 总资源数
-- `active_resources` - 活跃资源数
+### 日志中心 (Loki)
+通过前台“日志中心”直接查询所有接入主机的 `/var/log/*.log` 系统日志。
 
-### Grafana 仪表盘
-
-访问 http://localhost:3000 (admin/admin)
+### 可视化面板 (Grafana)
+访问 http://localhost:3000 (admin/admin),内置了预设的 Redis、MySQL 及服务器性能大屏。
 
 ## 开发指南
 
