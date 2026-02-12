@@ -443,47 +443,10 @@ const loadResource = async () => {
 
 const loadDiskPartitions = async () => {
   try {
-    const [usageRes, totalRes, usedRes] = await Promise.all([
-      monitoringApi.getResourceDiskPartitions(resourceId),
-      monitoringApi.getResourceDiskPartitionsTotal(resourceId),
-      monitoringApi.getResourceDiskPartitionsUsed(resourceId)
-    ])
-
-    if (usageRes.data?.status === 'success' && Array.isArray(usageRes.data.data?.result)) {
-      // Helper map for total/used
-      const totalMap = new Map()
-      const usedMap = new Map()
-      
-      if (totalRes.data?.status === 'success') {
-        totalRes.data.data.result.forEach((item: any) => {
-          totalMap.set(item.metric.mountpoint, parseFloat(item.value[1]))
-        })
-      }
-      if (usedRes.data?.status === 'success') {
-        usedRes.data.data.result.forEach((item: any) => {
-          usedMap.set(item.metric.mountpoint, parseFloat(item.value[1]))
-        })
-      }
-
-      diskPartitions.value = usageRes.data.data.result
-        .map((item: any) => {
-          const mount = item.metric?.mountpoint || 'unknown'
-          const val = parseFloat(item.value?.[1])
-          const percent = isNaN(val) ? 0 : Math.min(100, Math.max(0, Math.round(val)))
-          
-          return {
-            mountpoint: mount,
-            device: item.metric?.device || '',
-            percent: percent,
-            total_gb: totalMap.get(mount) || 0,
-            used_gb: usedMap.get(mount) || 0
-          }
-        })
-        .filter((item: any) => item.mountpoint && item.mountpoint !== '/') // Filter out invalid items and root
-        .sort((a: any, b: any) => b.percent - a.percent)
-    } else {
-      diskPartitions.value = []
-    }
+    const res = await resourceApi.getDiskPartitions(resourceId)
+    diskPartitions.value = res.data
+      .filter((item: any) => item.mountpoint && item.mountpoint !== '/')
+      .sort((a: any, b: any) => b.percent - a.percent)
   } catch (e) {
     console.error('Failed to load partitions', e)
     diskPartitions.value = []
@@ -502,20 +465,13 @@ const loadHistory = async () => {
   })
 
   try {
-    // Calculate time range
-    const end = Math.floor(Date.now() / 1000)
-    let start = end - 3600
-    if (chartTimeRange.value === '6h') start = end - 3600 * 6
-    if (chartTimeRange.value === '24h') start = end - 3600 * 24
+    const hours = chartTimeRange.value === '1h' ? 1 : chartTimeRange.value === '6h' ? 6 : 24
+    const res = await resourceApi.getHistory(resourceId, hours)
+    const metrics = res.data.metrics || []
 
-    // Fetch metrics from Prometheus
-    const [cpuRes, memRes] = await Promise.all([
-      monitoringApi.getResourceCpuHistory(resourceId, start, end),
-      monitoringApi.getResourceMemoryHistory(resourceId, start, end)
-    ])
-
-    const cpuData = cpuRes.data.map((item: any) => [item.time * 1000, parseFloat(item.value)])
-    const memData = memRes.data.map((item: any) => [item.time * 1000, parseFloat(item.value)])
+    const cpuData = metrics.map((m: any) => [new Date(m.timestamp).getTime(), m.cpu_usage])
+    const memData = metrics.map((m: any) => [new Date(m.timestamp).getTime(), m.memory_usage])
+    const diskData = metrics.map((m: any) => [new Date(m.timestamp).getTime(), m.disk_usage])
 
     const option = {
       tooltip: {
@@ -525,7 +481,7 @@ const loadHistory = async () => {
         textStyle: { color: '#F8FAFC' }
       },
       legend: {
-        data: ['CPU', 'Memory'],
+        data: ['CPU', '内存', '磁盘'],
         textStyle: { color: '#94A3B8' },
         bottom: 0
       },
@@ -566,7 +522,7 @@ const loadHistory = async () => {
           }
         },
         {
-          name: 'Memory',
+          name: '内存',
           type: 'line',
           smooth: true,
           showSymbol: false,
@@ -578,18 +534,31 @@ const loadHistory = async () => {
               { offset: 1, color: 'rgba(168, 85, 247, 0.0)' }
             ])
           }
+        },
+        {
+          name: '磁盘',
+          type: 'line',
+          smooth: true,
+          showSymbol: false,
+          data: diskData,
+          itemStyle: { color: '#eab308' },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: 'rgba(234, 179, 8, 0.3)' },
+              { offset: 1, color: 'rgba(234, 179, 8, 0.0)' }
+            ])
+          }
         }
       ]
     }
     
     chartInstance.setOption(option)
     
-    // Update latest metrics from last data point
-    if (cpuData.length > 0) {
-      latestMetrics.value.cpu_usage = cpuData[cpuData.length - 1][1]
-    }
-    if (memData.length > 0) {
-      latestMetrics.value.memory_usage = memData[memData.length - 1][1]
+    if (metrics.length > 0) {
+      const last = metrics[metrics.length - 1]
+      latestMetrics.value.cpu_usage = last.cpu_usage
+      latestMetrics.value.memory_usage = last.memory_usage
+      latestMetrics.value.disk_usage = last.disk_usage
     }
 
   } catch (e) {
@@ -609,18 +578,13 @@ const loadNetworkHistory = async () => {
   })
 
   try {
-    const end = Math.floor(Date.now() / 1000)
-    let start = end - 3600
-    if (chartTimeRange.value === '6h') start = end - 3600 * 6
-    if (chartTimeRange.value === '24h') start = end - 3600 * 24
+    const hours = chartTimeRange.value === '1h' ? 1 : chartTimeRange.value === '6h' ? 6 : 24
+    const res = await resourceApi.getHistory(resourceId, hours)
+    const metrics = res.data.metrics || []
 
-    const [netRxRes, netTxRes] = await Promise.all([
-      monitoringApi.getResourceNetworkRxHistory(resourceId, start, end),
-      monitoringApi.getResourceNetworkTxHistory(resourceId, start, end)
-    ])
-
-    const netRxData = netRxRes.data.map((item: any) => [item.time * 1000, parseFloat(item.value)])
-    const netTxData = netTxRes.data.map((item: any) => [item.time * 1000, parseFloat(item.value)])
+    // Backend returns bytes/s, convert to MB/s for the chart
+    const netInData = metrics.map((m: any) => [new Date(m.timestamp).getTime(), m.network_in / (1024 * 1024)])
+    const netOutData = metrics.map((m: any) => [new Date(m.timestamp).getTime(), m.network_out / (1024 * 1024)])
 
     const option = {
       tooltip: {
@@ -631,7 +595,7 @@ const loadNetworkHistory = async () => {
         formatter: function(params: any) {
           let result = params[0].axisValueLabel + '<br/>'
           params.forEach((item: any) => {
-            result += `${item.marker} ${item.seriesName}: ${item.value[1].toFixed(2)} MB<br/>`
+            result += `${item.marker} ${item.seriesName}: ${item.value[1].toFixed(2)} MB/s<br/>`
           })
           return result
         }
@@ -656,7 +620,7 @@ const loadNetworkHistory = async () => {
       },
       yAxis: {
         type: 'value',
-        name: '流量 MB',
+        name: '流量 MB/s',
         min: 0,
         axisLine: { show: false },
         axisLabel: { color: '#64748B' },
@@ -668,7 +632,7 @@ const loadNetworkHistory = async () => {
           type: 'line',
           smooth: true,
           showSymbol: false,
-          data: netRxData,
+          data: netInData,
           itemStyle: { color: '#22c55e' },
           areaStyle: { 
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -682,7 +646,7 @@ const loadNetworkHistory = async () => {
           type: 'line',
           smooth: true,
           showSymbol: false,
-          data: netTxData,
+          data: netOutData,
           itemStyle: { color: '#f97316' },
           areaStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [

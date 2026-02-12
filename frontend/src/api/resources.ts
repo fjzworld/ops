@@ -1,9 +1,9 @@
 import api from './client'
-import { 
-    Resource, 
-    ResourceListParams, 
-    ResourceCreateRequest, 
-    ResourceUpdateRequest, 
+import {
+    Resource,
+    ResourceListParams,
+    ResourceCreateRequest,
+    ResourceUpdateRequest,
     ResourceDeleteRequest,
     ResourceMetricsUpdate
 } from '@/types/resource'
@@ -53,7 +53,11 @@ export const resourceApi = {
     },
 
     getHistory(id: number, hours: number = 24) {
-        return api.get<any[]>(`/resources/${id}/metrics/history`, { params: { hours } })
+        return api.get<any>(`/resources/${id}/metrics/history`, { params: { hours } })
+    },
+
+    getDiskPartitions(id: number) {
+        return api.get<any[]>(`/resources/${id}/disk-partitions`)
     },
 
     getProcesses(id: number) {

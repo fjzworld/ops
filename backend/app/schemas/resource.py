@@ -59,6 +59,8 @@ class ResourceInDB(ResourceBase):
     cpu_usage: Optional[float] = 0.0
     memory_usage: Optional[float] = 0.0
     disk_usage: Optional[float] = 0.0
+    network_in: Optional[float] = 0.0
+    network_out: Optional[float] = 0.0
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     last_seen: Optional[datetime] = None

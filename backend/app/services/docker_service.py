@@ -104,7 +104,20 @@ class DockerService:
         finally:
             self.detector.close()
     
+    def remove_container(self, container_id: str) -> bool:
+        """Remove a container (force)"""
+        try:
+            self.detector.connect()
+            self.detector.execute_command(f"docker rm -f {container_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to remove container {container_id}: {e}")
+            raise RuntimeError(f"删除容器失败: {e}")
+        finally:
+            self.detector.close()
+    
     def get_logs(self, container_id: str, tail: int = 100) -> str:
+
         """
         Get container logs
         

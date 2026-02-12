@@ -20,6 +20,7 @@ if config.config_file_name is not None:
 # target_metadata = mymodel.Base.metadata
 from app.core.database import Base
 from app.core.config import settings
+import app.models
 
 target_metadata = Base.metadata
 

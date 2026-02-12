@@ -130,16 +130,14 @@ def deploy_alloy_agent(
         from urllib.parse import urlparse, urlunparse
         
         parsed_backend = urlparse(backend_url)
-        base_url = f"{parsed_backend.scheme}://{parsed_backend.netloc}"
+        host_ip = parsed_backend.hostname or parsed_backend.netloc.split(':')[0]
         
+        # Use direct ports since Nginx proxy might not cover /loki or /prometheus paths on API port
         if not prometheus_url:
-            # Assume Nginx proxy at /prometheus/ -> http://prometheus:9090/
-            prometheus_url = f"{base_url}/prometheus/api/v1/write"
+            prometheus_url = f"http://{host_ip}:9090/api/v1/write"
         
         if not loki_url:
-            # Assume Nginx proxy at /loki/ -> http://loki:3100/
-            # Loki push endpoint is /loki/api/v1/push
-            loki_url = f"{base_url}/loki/loki/api/v1/push"
+            loki_url = f"http://{host_ip}:3100/loki/api/v1/push"
             
         log(f"Using Prometheus URL: {prometheus_url}")
         log(f"Using Loki URL: {loki_url}")
@@ -177,7 +175,8 @@ def deploy_alloy_agent(
             prometheus_push_url=prometheus_url,
             loki_push_url=loki_url,
             resource_id=resource_id,
-            backend_url=backend_url
+            backend_url=backend_url,
+            host_ip=credentials.host
         )
         
         execute("mkdir -p /etc/alloy")

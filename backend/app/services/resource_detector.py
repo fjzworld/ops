@@ -74,7 +74,9 @@ class ResourceDetector:
                     port=self.credentials.port,
                     username=self.credentials.username,
                     pkey=key,
-                    timeout=10
+                    timeout=10,
+                    look_for_keys=False,
+                    allow_agent=False
                 )
             else:
                 # Use password authentication
@@ -83,7 +85,9 @@ class ResourceDetector:
                     port=self.credentials.port,
                     username=self.credentials.username,
                     password=self.credentials.password,
-                    timeout=10
+                    timeout=10,
+                    look_for_keys=False,
+                    allow_agent=False
                 )
         except Exception as e:
             raise ConnectionError(f"SSH connection failed: {str(e)}")

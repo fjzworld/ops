@@ -38,23 +38,30 @@ def sync_resource_status():
         # Query 3: Disk Usage (Root partition)
         # 100 - ((node_filesystem_avail_bytes{mountpoint="/"} * 100) / node_filesystem_size_bytes{mountpoint="/"})
         disk_query = '100 - ((node_filesystem_avail_bytes{mountpoint="/"} * 100) / node_filesystem_size_bytes{mountpoint="/"})'
+        
+        # Query 4 & 5: Network Traffic
+        net_in_query = 'sum by (resource_id) (irate(node_network_receive_bytes_total{device!~"lo|docker.*|veth.*"}[2m]))'
+        net_out_query = 'sum by (resource_id) (irate(node_network_transmit_bytes_total{device!~"lo|docker.*|veth.*"}[2m]))'
 
         async def fetch_metrics():
              async with httpx.AsyncClient(timeout=10.0) as http_client:
                 # Reuse client query method logic or just use http_client directly for batch
-                # Ideally PrometheusClient should have a query method, checking that
-                # It has query_active_resources and query_range but not simple query
-                # Let's add simple query to PrometheusClient or just use what we have.
-                # Actually query_active_resources used query_url directly.
-                # Let's instantiate client and use its internal URL
-                
                 resp_cpu = await http_client.get(client.query_url, params={"query": cpu_query})
                 resp_mem = await http_client.get(client.query_url, params={"query": mem_query})
                 resp_disk = await http_client.get(client.query_url, params={"query": disk_query})
-                return resp_cpu.json(), resp_mem.json(), resp_disk.json()
+                resp_net_in = await http_client.get(client.query_url, params={"query": net_in_query})
+                resp_net_out = await http_client.get(client.query_url, params={"query": net_out_query})
+                
+                return (
+                    resp_cpu.json(), 
+                    resp_mem.json(), 
+                    resp_disk.json(),
+                    resp_net_in.json(),
+                    resp_net_out.json()
+                )
 
         import httpx
-        cpu_data, mem_data, disk_data = asyncio.run(fetch_metrics())
+        cpu_data, mem_data, disk_data, net_in_data, net_out_data = asyncio.run(fetch_metrics())
         
         # Parse metrics into a dict {resource_id: {cpu, mem, disk}}
         metrics_map = {}
@@ -74,6 +81,8 @@ def sync_resource_status():
         parse_prom_result(cpu_data, "cpu_usage")
         parse_prom_result(mem_data, "memory_usage")
         parse_prom_result(disk_data, "disk_usage")
+        parse_prom_result(net_in_data, "network_in")
+        parse_prom_result(net_out_data, "network_out")
 
     except Exception as e:
         logger.error(f"Failed to query metrics from Prometheus: {e}")
@@ -103,7 +112,9 @@ def sync_resource_status():
                 "id": rid,
                 "cpu_usage": metrics.get("cpu_usage"),
                 "memory_usage": metrics.get("memory_usage"),
-                "disk_usage": metrics.get("disk_usage")
+                "disk_usage": metrics.get("disk_usage"),
+                "network_in": metrics.get("network_in", 0.0),
+                "network_out": metrics.get("network_out", 0.0)
             })
             
         if updates:

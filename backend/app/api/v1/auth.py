@@ -91,8 +91,11 @@ async def login(
     result = await db.execute(select(User).filter(User.username == form_data.username))
     user = result.scalars().first()
     
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        raise UnauthorizedException(message="Incorrect username or password")
+    if not user:
+        raise UnauthorizedException(message="用户不存在")
+    
+    if not verify_password(form_data.password, user.hashed_password):
+        raise UnauthorizedException(message="密码错误")
     
     if not user.is_active:
         raise BadRequestException(message="Inactive user")

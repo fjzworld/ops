@@ -44,6 +44,10 @@ class ApiClient {
                     const { status, data } = error.response
 
                     if (status === 401) {
+                        // Skip redirect for login request to handle errors in component
+                        if (error.config?.url?.includes('/auth/login')) {
+                            return Promise.reject(error)
+                        }
                         localStorage.removeItem('token')
                         window.location.href = '/login'
                         ElMessage.error('登录已过期,请重新登录')

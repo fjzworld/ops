@@ -51,7 +51,7 @@ class PrometheusClient:
         Query Prometheus for active resources within the specified window.
         Uses the 'integrated-agent' job and 'up' metric.
         """
-        query = f'count_over_time(up{{job="integrated-agent"}}[{window}])'
+        query = f'count by (resource_id) (count_over_time(node_load1[{window}]))'
         
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:

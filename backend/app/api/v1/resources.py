@@ -1,10 +1,11 @@
 import logging
 import asyncio
+import paramiko
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta
 from app.core.database import get_async_db
@@ -14,20 +15,19 @@ from app.models.resource import Resource, ResourceType, ResourceStatus
 from app.models.task import Task, TaskStatus
 from app.schemas.resource import (
     ResourceCreate, ResourceUpdate, ResourceInDB,
-    ResourceMetrics, ResourceProbeRequest, ResourceProbeResponse,
+    ResourceProbeRequest, ResourceProbeResponse,
     ResourceDeleteRequest, ResourceStats, MessageResponse, MetricResponse
 )
 from app.schemas.task import TaskExecutionMessage
 from app.api.v1.auth import get_current_active_user
 from app.services.resource_detector import probe_server, SSHCredentials
-from app.services.agent_deployer import deploy_agent, uninstall_agent
 from app.services.alloy_deployer import deploy_alloy_agent
 from app.services.credential_service import CredentialService
 from app.tasks.deployment import deploy_alloy_task
-from app.core.security import create_access_token
 from app.core.encryption import encrypt_string
-from app.core.monitoring import update_metrics, clear_metrics, update_resource_status
+from app.core.monitoring import clear_metrics, update_resource_status
 from app.core.config import settings
+from app.core.ssh import create_secure_client
 
 from app.core.prometheus import PrometheusClient
 
@@ -164,6 +164,36 @@ async def create_resource(
     if auto_discovery:
         db_resource.status = ResourceStatus.ACTIVE
     
+    if resource_data.ssh_password or resource_data.ssh_private_key:
+        logger.info(f"Validating SSH credentials for {resource_data.ip_address}")
+        
+        def validate_ssh():
+            client = create_secure_client()
+            try:
+                connect_kwargs = {
+                    "hostname": resource_data.ip_address,
+                    "port": resource_data.ssh_port,
+                    "username": resource_data.ssh_username,
+                    "timeout": 10,
+                    "look_for_keys": False,
+                    "allow_agent": False
+                }
+                
+                if resource_data.ssh_private_key:
+                    from io import StringIO
+                    pkey = paramiko.RSAKey.from_private_key(StringIO(resource_data.ssh_private_key))
+                    connect_kwargs["pkey"] = pkey
+                else:
+                    connect_kwargs["password"] = resource_data.ssh_password
+                
+                client.connect(**connect_kwargs)
+            except (paramiko.AuthenticationException, paramiko.SSHException) as e:
+                raise BadRequestException(message=f"SSH Connection Failed: {str(e)}")
+            finally:
+                client.close()
+        
+        await run_in_threadpool(validate_ssh)
+
     db.add(db_resource)
     await db.commit()
     await db.refresh(db_resource)
@@ -245,28 +275,7 @@ async def delete_resource(
     
     if delete_request and delete_request.uninstall_agent and resource.ip_address:
         logger.info(f"准备卸载 Agent: host={resource.ip_address}, user={delete_request.ssh_username}")
-        try:
-            credentials = CredentialService.build_ssh_credentials(
-                ip_address=resource.ip_address,
-                port=delete_request.ssh_port,
-                username=delete_request.ssh_username,
-                password=delete_request.ssh_password,
-                private_key=delete_request.ssh_private_key
-            )
-            
-            logger.info(f"正在从 {resource.ip_address} 卸载 Agent...")
-            agent_uninstalled = await run_in_threadpool(uninstall_agent, credentials)
-            
-            if agent_uninstalled:
-                logger.info(f"✓ Agent 已从 {resource.ip_address} 卸载")
-            else:
-                logger.warning(f"Agent 卸载失败，但继续删除资源")
-                uninstall_error = "Agent 卸载失败（可能已被手动删除）"
-                
-        except Exception as e:
-            logger.error(f"卸载 Agent 时出错: {e}")
-            uninstall_error = str(e)
-            # 继续删除资源，即使 Agent 卸载失败
+        logger.warning("Legacy agent uninstaller removed. Skipping uninstallation.")
     
     # Clear Prometheus metrics for this resource before deletion
     clear_metrics(
@@ -274,12 +283,6 @@ async def delete_resource(
         resource_name=resource.name,
         ip_address=resource.ip_address or ""
     )
-    
-    # Delete related metrics and process metrics first (avoid foreign key constraint)
-    from app.models.metric import Metric, ProcessMetric
-    
-    await db.execute(delete(Metric).where(Metric.resource_id == resource_id))
-    await db.execute(delete(ProcessMetric).where(ProcessMetric.resource_id == resource_id))
     
     await db.delete(resource)
     await db.commit()
@@ -295,107 +298,7 @@ async def delete_resource(
     return response
 
 
-@router.post("/{resource_id}/metrics")
-async def update_resource_metrics(
-    resource_id: int,
-    metrics: ResourceMetrics,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_async_db)
-):
-    """Update resource metrics and store historical data"""
-    from app.models.metric import Metric, ProcessMetric
-    
-    resource = await db.get(Resource, resource_id)
-    if not resource:
-        raise NotFoundException(message="Resource not found")
-    
-    # Update current metrics on resource
-    resource.cpu_usage = metrics.cpu_usage
-    resource.memory_usage = metrics.memory_usage
-    resource.disk_usage = metrics.disk_usage
-    resource.last_seen = datetime.utcnow()
-    
-    # Update Prometheus metrics
-    update_metrics(
-        resource_id=str(resource.id),
-        resource_name=resource.name,
-        ip_address=resource.ip_address,
-        metrics=metrics.dict()
-    )
-    
-    # Store historical metrics
-    metric_record = Metric(
-        resource_id=resource_id,
-        cpu_usage=metrics.cpu_usage,
-        memory_usage=metrics.memory_usage,
-        disk_usage=metrics.disk_usage,
-        network_in=metrics.network_in or 0,
-        network_out=metrics.network_out or 0
-    )
-    db.add(metric_record)
-    
-    # Store top processes if provided
-    if metrics.top_processes:
-        for proc in metrics.top_processes[:5]:  # Limit to top 5
-            process_record = ProcessMetric(
-                resource_id=resource_id,
-                process_name=proc.get('name', 'unknown'),
-                process_pid=proc.get('pid', 0),
-                cpu_percent=proc.get('cpu_percent', 0),
-                memory_percent=proc.get('memory_percent', 0)
-            )
-            db.add(process_record)
-    
-    await db.commit()
-    await db.refresh(resource)
-    
-    # Check for alert thresholds
-    await check_alert_thresholds(resource, metrics, db)
-    
-    return {"message": "Metrics updated successfully", "status": "ok"}
-
-
-async def check_alert_thresholds(resource: Resource, metrics: ResourceMetrics, db: AsyncSession):
-    """Check if metrics exceed alert thresholds"""
-    from app.models.alert import Alert, AlertSeverity, AlertStatus
-    
-    # Query active alert rules for this resource
-    # For now, use simple thresholds
-    alerts_to_create = []
-    
-    if metrics.cpu_usage > 80:
-        alerts_to_create.append({
-            "resource_id": resource.id,
-            "severity": AlertSeverity.CRITICAL if metrics.cpu_usage > 90 else AlertSeverity.WARNING,
-            "message": f"High CPU usage on {resource.name}: {metrics.cpu_usage:.1f}%",
-            "status": AlertStatus.FIRING
-        })
-    
-    if metrics.memory_usage > 80:
-        alerts_to_create.append({
-            "resource_id": resource.id,
-            "severity": AlertSeverity.CRITICAL if metrics.memory_usage > 90 else AlertSeverity.WARNING,
-            "message": f"High memory usage on {resource.name}: {metrics.memory_usage:.1f}%",
-            "status": AlertStatus.FIRING
-        })
-    
-    if metrics.disk_usage > 85:
-        alerts_to_create.append({
-            "resource_id": resource.id,
-            "severity": AlertSeverity.WARNING,
-            "message": f"High disk usage on {resource.name}: {metrics.disk_usage:.1f}%",
-            "status": AlertStatus.FIRING
-        })
-    
-    for alert_data in alerts_to_create:
-        alert = Alert(**alert_data)
-        db.add(alert)
-    
-    if alerts_to_create:
-        await db.commit()
-
-
-def merge_metrics(cpu_results: List[dict], mem_results: List[dict], disk_results: List[dict]) -> List[dict]:
+def merge_metrics(cpu_results, mem_results, disk_results, net_in_results, net_out_results) -> List[dict]:
     merged_data = {}
     
     def process_result(result_list, key):
@@ -403,7 +306,7 @@ def merge_metrics(cpu_results: List[dict], mem_results: List[dict], disk_results
             return
         for result in result_list:
             for ts, val in result.get("values", []):
-                ts_key = int(ts)
+                ts_key = int(float(ts))
                 if ts_key not in merged_data:
                     merged_data[ts_key] = {
                         "timestamp": datetime.fromtimestamp(ts_key).isoformat(),
@@ -418,6 +321,8 @@ def merge_metrics(cpu_results: List[dict], mem_results: List[dict], disk_results
     process_result(cpu_results, "cpu_usage")
     process_result(mem_results, "memory_usage")
     process_result(disk_results, "disk_usage")
+    process_result(net_in_results, "network_in")
+    process_result(net_out_results, "network_out")
     
     sorted_ts = sorted(merged_data.keys())
     return [merged_data[ts] for ts in sorted_ts]
@@ -445,17 +350,21 @@ async def get_metrics_history(
     else:
         step = "15m"
         
-    cpu_query = f'100 - (avg by (instance) (irate(node_cpu_seconds_total{{mode="idle", resource_id="{resource_id}"}}[5m])) * 100)'
+    cpu_query = f'100 - (avg by (resource_id) (irate(node_cpu_seconds_total{{mode="idle", resource_id="{resource_id}"}}[5m])) * 100)'
     mem_query = f'(node_memory_MemTotal_bytes{{resource_id="{resource_id}"}} - node_memory_MemAvailable_bytes{{resource_id="{resource_id}"}}) / node_memory_MemTotal_bytes{{resource_id="{resource_id}"}} * 100'
     disk_query = f'100 - ((node_filesystem_avail_bytes{{resource_id="{resource_id}", mountpoint="/"}} * 100) / node_filesystem_size_bytes{{resource_id="{resource_id}", mountpoint="/"}})'
-    
-    cpu_results, mem_results, disk_results = await asyncio.gather(
+    net_in_query = f'sum by (resource_id) (irate(node_network_receive_bytes_total{{resource_id="{resource_id}", device!~"lo|docker.*|veth.*"}}[5m]))'
+    net_out_query = f'sum by (resource_id) (irate(node_network_transmit_bytes_total{{resource_id="{resource_id}", device!~"lo|docker.*|veth.*"}}[5m]))'
+
+    cpu_results, mem_results, disk_results, net_in_results, net_out_results = await asyncio.gather(
         prom_client.query_range(cpu_query, start, end, step),
         prom_client.query_range(mem_query, start, end, step),
-        prom_client.query_range(disk_query, start, end, step)
+        prom_client.query_range(disk_query, start, end, step),
+        prom_client.query_range(net_in_query, start, end, step),
+        prom_client.query_range(net_out_query, start, end, step)
     )
     
-    metrics = merge_metrics(cpu_results, mem_results, disk_results)
+    metrics = merge_metrics(cpu_results, mem_results, disk_results, net_in_results, net_out_results)
     
     return {
         "resource_id": resource_id,
@@ -464,39 +373,62 @@ async def get_metrics_history(
     }
 
 
-@router.get("/{resource_id}/processes")
-async def get_top_processes(
+@router.get("/{resource_id}/disk-partitions")
+async def get_disk_partitions(
     resource_id: int,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_async_db)
 ):
-    """Get latest top processes for a resource"""
-    from app.models.metric import ProcessMetric
-    from datetime import timedelta
+    """Get latest disk partitions info for a resource"""
+    resource = await db.get(Resource, resource_id)
+    if not resource:
+        raise NotFoundException(message="Resource not found")
     
-    # Get processes from last 5 minutes
-    since = datetime.utcnow() - timedelta(minutes=5)
-    query = select(ProcessMetric).filter(
-        ProcessMetric.resource_id == resource_id,
-        ProcessMetric.timestamp >= since
-    ).order_by(ProcessMetric.timestamp.desc()).limit(10)
+    prom_client = PrometheusClient()
     
-    result = await db.execute(query)
-    processes = result.scalars().all()
+    # Query for availability, size, and percent
+    # Filter out tempfs, loop devices etc.
+    common_filter = f'resource_id="{resource_id}", fstype!~"tmpfs|overlay|iso9660|squashfs", mountpoint!~"/boot.*|/var/lib/docker.*|/run.*"'
+    usage_query = f'100 - ((node_filesystem_avail_bytes{{{common_filter}}} * 100) / node_filesystem_size_bytes{{{common_filter}}})'
+    size_query = f'node_filesystem_size_bytes{{{common_filter}}}'
+    avail_query = f'node_filesystem_avail_bytes{{{common_filter}}}'
     
-    return {
-        "resource_id": resource_id,
-        "processes": [
-            {
-                "name": p.process_name,
-                "pid": p.process_pid,
-                "cpu_percent": p.cpu_percent,
-                "memory_percent": p.memory_percent,
-                "timestamp": p.timestamp.isoformat()
-            }
-            for p in processes
-        ]
-    }
+    import httpx
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        res_usage = await client.get(prom_client.query_url, params={"query": usage_query})
+        res_size = await client.get(prom_client.query_url, params={"query": size_query})
+        res_avail = await client.get(prom_client.query_url, params={"query": avail_query})
+        
+        usage_data = res_usage.json().get("data", {}).get("result", [])
+        size_data = res_size.json().get("data", {}).get("result", [])
+        avail_data = res_avail.json().get("data", {}).get("result", [])
+        
+    partitions = {}
+    
+    for item in usage_data:
+        m = item.get("metric", {}).get("mountpoint")
+        if not m: continue
+        val = float(item.get("value", [0, "0"])[1])
+        partitions[m] = {
+            "mountpoint": m, 
+            "percent": round(val, 1), 
+            "device": item.get("metric", {}).get("device")
+        }
+        
+    for item in size_data:
+        m = item.get("metric", {}).get("mountpoint")
+        if m in partitions:
+            val = float(item.get("value", [0, "0"])[1])
+            partitions[m]["total_gb"] = round(val / (1024**3), 2)
+            
+    for item in avail_data:
+        m = item.get("metric", {}).get("mountpoint")
+        if m in partitions:
+            val = float(item.get("value", [0, "0"])[1])
+            partitions[m]["avail_gb"] = round(val / (1024**3), 2)
+            partitions[m]["used_gb"] = round(partitions[m].get("total_gb", 0) - partitions[m]["avail_gb"], 2)
+            
+    return list(partitions.values())
 
 
 @router.get("/stats/summary", response_model=ResourceStats)
@@ -563,63 +495,6 @@ async def probe_resource(
         raise InternalServerError(message=f"SSH连接失败: {str(e)}")
     except Exception as e:
         raise InternalServerError(message=f"探测失败: {str(e)}")
-
-
-@router.post("/{resource_id}/deploy-agent", response_model=MessageResponse)
-async def deploy_monitoring_agent(
-    resource_id: int,
-    probe_request: ResourceProbeRequest,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_async_db)
-):
-    """
-    Deploy monitoring agent to remote server
-    The agent will continuously report metrics to backend
-    """
-    resource = await db.get(Resource, resource_id)
-    if not resource:
-        raise NotFoundException(message="Resource not found")
-    
-    try:
-        password = probe_request.ssh_password
-        private_key = probe_request.ssh_private_key
-        
-        if not password and not private_key:
-            credentials = CredentialService.get_ssh_credentials(resource)
-        else:
-            credentials = CredentialService.build_ssh_credentials(
-                ip_address=probe_request.ip_address,
-                port=probe_request.ssh_port,
-                username=probe_request.ssh_username,
-                password=password,
-                private_key=private_key
-            )
-        
-        access_token_expires = timedelta(days=365*10)
-        api_token = create_access_token(
-            data={"sub": current_user.username},
-            expires_delta=access_token_expires
-        )
-        
-        backend_url = probe_request.backend_url or settings.EXTERNAL_API_URL
-        
-        success = await run_in_threadpool(
-            deploy_agent,
-            credentials=credentials,
-            resource_id=resource_id,
-            api_token=api_token,
-            backend_url=backend_url
-        )
-        
-        if success:
-            resource.status = ResourceStatus.ACTIVE
-            await db.commit()
-            
-            return {"message": "Monitoring agent deployed successfully"}
-        else:
-            raise InternalServerError(message="Agent deployment failed")
-    except Exception as e:
-        raise InternalServerError(message=f"部署失败: {str(e)}")
 
 
 @router.post("/{resource_id}/deploy-alloy", response_model=TaskExecutionMessage)

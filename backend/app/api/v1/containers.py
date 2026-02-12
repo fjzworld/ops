@@ -63,7 +63,7 @@ async def list_containers(
         
         return ContainerResponse(
             resource_id=resource_id,
-            resource_name=resource.name,
+            resource_name=str(resource.name),
             containers=containers
         )
     except AppException:
@@ -156,6 +156,27 @@ async def get_container_logs(
         docker_service = DockerService(credentials)
         logs = docker_service.get_logs(container_id, tail=tail)
         return ContainerLogsResponse(container_id=container_id, logs=logs)
+    except Exception as e:
+        raise InternalServerError(message=str(e))
+
+
+@router.delete("/{resource_id}/containers/{container_id}", response_model=MessageResponse)
+async def remove_container(
+    resource_id: int,
+    container_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Remove a container"""
+    resource = await db.get(Resource, resource_id)
+    if not resource:
+        raise NotFoundException(message="资源不存在")
+    
+    try:
+        credentials = CredentialService.get_ssh_credentials(resource)
+        docker_service = DockerService(credentials)
+        docker_service.remove_container(container_id)
+        return MessageResponse(message=f"容器 {container_id} 已删除")
     except Exception as e:
         raise InternalServerError(message=str(e))
 

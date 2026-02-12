@@ -53,6 +53,8 @@ class Resource(Base):
     cpu_usage = Column(Float, default=0.0)
     memory_usage = Column(Float, default=0.0)
     disk_usage = Column(Float, default=0.0)
+    network_in = Column(Float, default=0.0)  # in bytes/s
+    network_out = Column(Float, default=0.0) # in bytes/s
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -60,7 +62,6 @@ class Resource(Base):
     last_seen = Column(DateTime(timezone=True))
     
     # Relationships
-    metrics = relationship("Metric", back_populates="resource", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="resource", cascade="all, delete-orphan")
     
     # SSH Credentials (Encrypted)

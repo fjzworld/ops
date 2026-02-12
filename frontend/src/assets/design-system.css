@@ -58,12 +58,12 @@
 
 /* 全局覆盖 - 基础元素 */
 html {
-  background-color: var(--bg-primary) !important;
+  background-color: var(--bg-primary);
 }
 
 body {
-  background-color: transparent !important;
-  color: var(--text-primary) !important;
+  background-color: transparent;
+  color: var(--text-primary);
   font-family: var(--font-sans);
   min-height: 100vh;
 }

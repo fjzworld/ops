@@ -16,6 +16,7 @@ prometheus.remote_write "prometheus" {
   external_labels = {
     resource_id = "{{ resource_id }}",
     job         = "integrated-agent",
+    host        = "{{ host_ip }}",
   }
 }
 
@@ -24,6 +25,7 @@ loki.source.file "system_logs" {
   targets = [
     { __path__ = "/var/log/*.log" },
     { __path__ = "/var/log/syslog" },
+    { __path__ = "/var/log/messages" },
   ]
   forward_to = [loki.write.loki.receiver]
 }
@@ -32,9 +34,9 @@ loki.write "loki" {
   endpoint {
     url = "{{ loki_push_url }}"
   }
-
   external_labels = {
     resource_id = "{{ resource_id }}",
     job         = "varlogs",
+    host        = "{{ host_ip }}",
   }
 }
