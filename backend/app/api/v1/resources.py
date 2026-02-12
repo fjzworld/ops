@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,19 +11,26 @@ from app.core.database import get_async_db
 from app.core.exceptions import NotFoundException, BadRequestException, PermissionDeniedException, InternalServerError
 from app.models.user import User
 from app.models.resource import Resource, ResourceType, ResourceStatus
+from app.models.task import Task, TaskStatus
 from app.schemas.resource import (
     ResourceCreate, ResourceUpdate, ResourceInDB,
     ResourceMetrics, ResourceProbeRequest, ResourceProbeResponse,
     ResourceDeleteRequest, ResourceStats, MessageResponse, MetricResponse
 )
+from app.schemas.task import TaskExecutionMessage
 from app.api.v1.auth import get_current_active_user
 from app.services.resource_detector import probe_server, SSHCredentials
 from app.services.agent_deployer import deploy_agent, uninstall_agent
+from app.services.alloy_deployer import deploy_alloy_agent
 from app.services.credential_service import CredentialService
+from app.tasks.deployment import deploy_alloy_task
 from app.core.security import create_access_token
 from app.core.encryption import encrypt_string
 from app.core.monitoring import update_metrics, clear_metrics, update_resource_status
 from app.core.config import settings
+
+from app.core.prometheus import PrometheusClient
+
 
 logger = logging.getLogger(__name__)
 
@@ -164,28 +172,21 @@ async def create_resource(
     if auto_discovery:
         try:
             logger.info(f"Auto-deploying agent to {db_resource.name}...")
-            # Generate Token
-            access_token_expires = timedelta(days=365*10)
-            api_token = create_access_token(
-                data={"sub": current_user.username},
-                expires_delta=access_token_expires
-            )
             
-            # Use provided backend URL or default
+            # Determine backend URL for Alloy (Prometheus/Loki push endpoints will be derived from this)
             backend_url = resource_data.backend_url or settings.EXTERNAL_API_URL
             
-            success = await run_in_threadpool(
-                deploy_agent,
+            success, logs = await run_in_threadpool(
+                deploy_alloy_agent,
                 credentials=credentials, # type: ignore
                 resource_id=db_resource.id,
-                api_token=api_token,
                 backend_url=backend_url
             )
             
             if success:
                 logger.info(f"Agent deployed successfully to {db_resource.name}")
             else:
-                logger.warning(f"Agent deployment failed for {db_resource.name}")
+                logger.warning(f"Agent deployment failed for {db_resource.name}. Logs: {logs}")
                 # We don't rollback creation, just warn
         except Exception as e:
             logger.error(f"Error deploying agent: {e}", exc_info=True)
@@ -394,47 +395,72 @@ async def check_alert_thresholds(resource: Resource, metrics: ResourceMetrics, d
         await db.commit()
 
 
+def merge_metrics(cpu_results: List[dict], mem_results: List[dict], disk_results: List[dict]) -> List[dict]:
+    merged_data = {}
+    
+    def process_result(result_list, key):
+        if not result_list:
+            return
+        for result in result_list:
+            for ts, val in result.get("values", []):
+                ts_key = int(ts)
+                if ts_key not in merged_data:
+                    merged_data[ts_key] = {
+                        "timestamp": datetime.fromtimestamp(ts_key).isoformat(),
+                        "cpu_usage": 0.0,
+                        "memory_usage": 0.0,
+                        "disk_usage": 0.0,
+                        "network_in": 0.0,
+                        "network_out": 0.0
+                    }
+                merged_data[ts_key][key] = float(val)
+
+    process_result(cpu_results, "cpu_usage")
+    process_result(mem_results, "memory_usage")
+    process_result(disk_results, "disk_usage")
+    
+    sorted_ts = sorted(merged_data.keys())
+    return [merged_data[ts] for ts in sorted_ts]
+
+
 @router.get("/{resource_id}/metrics/history", response_model=MetricResponse)
 async def get_metrics_history(
     resource_id: int,
-    hours: int = Query(24, ge=1, le=168),  # Last 24 hours by default, max 1 week
+    hours: int = Query(24, ge=1, le=168),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_async_db)
 ):
-    """Get historical metrics for a resource"""
-    from app.models.metric import Metric
-    from datetime import timedelta
-    
     resource = await db.get(Resource, resource_id)
     if not resource:
         raise NotFoundException(message="Resource not found")
     
-    # Query metrics from last N hours
-    since = datetime.utcnow() - timedelta(hours=hours)
-    query = select(Metric).filter(
-        Metric.resource_id == resource_id,
-        Metric.timestamp >= since
-    ).order_by(Metric.timestamp.asc())
+    prom_client = PrometheusClient()
     
-    result = await db.execute(query)
-    metrics = result.scalars().all()
+    end = datetime.utcnow().timestamp()
+    start = end - (hours * 3600)
+    if hours <= 6:
+        step = "1m"
+    elif hours <= 24:
+        step = "5m"
+    else:
+        step = "15m"
+        
+    cpu_query = f'100 - (avg by (instance) (irate(node_cpu_seconds_total{{mode="idle", resource_id="{resource_id}"}}[5m])) * 100)'
+    mem_query = f'(node_memory_MemTotal_bytes{{resource_id="{resource_id}"}} - node_memory_MemAvailable_bytes{{resource_id="{resource_id}"}}) / node_memory_MemTotal_bytes{{resource_id="{resource_id}"}} * 100'
+    disk_query = f'100 - ((node_filesystem_avail_bytes{{resource_id="{resource_id}", mountpoint="/"}} * 100) / node_filesystem_size_bytes{{resource_id="{resource_id}", mountpoint="/"}})'
+    
+    cpu_results, mem_results, disk_results = await asyncio.gather(
+        prom_client.query_range(cpu_query, start, end, step),
+        prom_client.query_range(mem_query, start, end, step),
+        prom_client.query_range(disk_query, start, end, step)
+    )
+    
+    metrics = merge_metrics(cpu_results, mem_results, disk_results)
     
     return {
         "resource_id": resource_id,
-        "resource_name": resource.name,
-        "period_hours": hours,
-        "data_points": len(metrics),
-        "metrics": [
-            {
-                "timestamp": m.timestamp.isoformat(),
-                "cpu_usage": m.cpu_usage,
-                "memory_usage": m.memory_usage,
-                "disk_usage": m.disk_usage,
-                "network_in": m.network_in,
-                "network_out": m.network_out
-            }
-            for m in metrics
-        ]
+        "metrics": metrics,
+        "processes": []
     }
 
 
@@ -550,18 +576,15 @@ async def deploy_monitoring_agent(
     Deploy monitoring agent to remote server
     The agent will continuously report metrics to backend
     """
-    # Verify resource exists
     resource = await db.get(Resource, resource_id)
     if not resource:
         raise NotFoundException(message="Resource not found")
     
     try:
-        # Check if we should use stored credentials
         password = probe_request.ssh_password
         private_key = probe_request.ssh_private_key
         
         if not password and not private_key:
-            # Use CredentialService to get stored credentials
             credentials = CredentialService.get_ssh_credentials(resource)
         else:
             credentials = CredentialService.build_ssh_credentials(
@@ -572,16 +595,12 @@ async def deploy_monitoring_agent(
                 private_key=private_key
             )
         
-        # Deploy agent
-        # Generate a long-lived token for the agent (10 years)
         access_token_expires = timedelta(days=365*10)
         api_token = create_access_token(
             data={"sub": current_user.username},
             expires_delta=access_token_expires
         )
         
-        # Use provided backend URL or default to internal network
-        # If the request comes from frontend, it should provide the external URL
         backend_url = probe_request.backend_url or settings.EXTERNAL_API_URL
         
         success = await run_in_threadpool(
@@ -601,3 +620,52 @@ async def deploy_monitoring_agent(
             raise InternalServerError(message="Agent deployment failed")
     except Exception as e:
         raise InternalServerError(message=f"部署失败: {str(e)}")
+
+
+@router.post("/{resource_id}/deploy-alloy", response_model=TaskExecutionMessage)
+async def deploy_alloy_monitoring_agent(
+    resource_id: int,
+    probe_request: ResourceProbeRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Deploy Grafana Alloy agent to remote server (Offline-ready)
+    The agent will push metrics and logs to Prometheus and Loki
+    """
+    resource = await db.get(Resource, resource_id)
+    if not resource:
+        raise NotFoundException(message="Resource not found")
+    
+    try:
+        backend_url = probe_request.backend_url or settings.EXTERNAL_API_URL
+        
+        task = Task(
+            name=f"Deploy Alloy to {resource.ip_address}",
+            description=f"Automated Alloy agent deployment for resource {resource.id}",
+            task_type="deploy_alloy",
+            target_resources=[resource_id],
+            status=TaskStatus.PENDING,
+            created_by=current_user.username
+        )
+        db.add(task)
+        await db.commit()
+        await db.refresh(task)
+        
+        deploy_alloy_task.delay(
+            task.id, 
+            resource_id, 
+            backend_url,
+            ssh_username=probe_request.ssh_username,
+            ssh_password=probe_request.ssh_password,
+            ssh_private_key=probe_request.ssh_private_key,
+            ssh_port=probe_request.ssh_port
+        )
+        
+        return {
+            "task_id": task.id,
+            "message": "Deployment started"
+        }
+    except Exception as e:
+        logger.error(f"Failed to queue Alloy deployment for resource {resource_id}: {e}", exc_info=True)
+        raise InternalServerError(message=f"部署启动失败: {str(e)}")

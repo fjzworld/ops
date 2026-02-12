@@ -1,12 +1,15 @@
 from celery import Celery
 from app.core.config import settings
 
+
 # Initialize Celery app
 celery_app = Celery(
     "ops-platform",
     broker=settings.REDIS_URL,
-    backend=settings.REDIS_URL
+    backend=settings.REDIS_URL,
+    include=['app.tasks.monitoring', 'app.tasks.deployment', 'app.tasks.automation']
 )
+
 
 # Celery configuration
 celery_app.conf.update(
@@ -24,6 +27,15 @@ celery_app.conf.update(
 
 # Auto-discover tasks
 celery_app.autodiscover_tasks(['app.tasks'])
+
+# Configure periodic tasks
+celery_app.conf.beat_schedule = {
+    "sync-resource-status-every-15s": {
+        "task": "sync_resource_status",
+        "schedule": 15.0,
+    },
+}
+
 
 
 @celery_app.task

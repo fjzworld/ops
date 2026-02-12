@@ -53,7 +53,7 @@
           type="warning" 
           @click="handleDeployClick"
         >
-          <el-icon><VideoPlay /></el-icon> 部署 Agent
+          <el-icon><VideoPlay /></el-icon> 部署监控
         </el-button>
         <el-button class="glass-btn" @click="$router.back()">
           <el-icon><Back /></el-icon> 返回
@@ -173,18 +173,18 @@
       </div>
     </div>
 
-    <!-- Deploy Agent Dialog -->
+    <!-- Deploy Grafana Alloy Dialog -->
     <el-dialog
       v-model="showDeployDialog"
-      title="部署监控 Agent"
+      title="部署 Grafana Alloy"
       width="500px"
       class="glass-dialog"
     >
       <el-form :model="deployForm" label-width="100px" class="glass-form" style="margin-top: 10px">
         <el-alert
-          title="Agent 部署"
+          title="Grafana Alloy 部署"
           type="warning"
-          description="将尝试连接服务器并安装/启动监控 Agent。请确保 SSH 凭据正确。"
+          description="将尝试连接服务器并安装/启动 Grafana Alloy。请确保 SSH 凭据正确。"
           show-icon
           :closable="false"
           style="margin-bottom: 20px"
@@ -234,9 +234,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElNotification, ElButton } from 'element-plus'
 import * as echarts from 'echarts'
 import { 
   Box, Back, Monitor, Platform, Cpu, Connection, Odometer, Cloudy, VideoPlay
@@ -290,7 +290,7 @@ const handleDeployClick = async () => {
   if (resource.value.status === 'ACTIVE') {
     try {
       await ElMessageBox.confirm(
-        '当前资源状态为"运行中"。若 Agent 已正常运行，无需重新部署。强制重装可能会导致监控短暂中断。确定要继续吗？',
+        '当前资源状态为"运行中"。若 Alloy 已正常运行，无需重新部署。强制重装可能会导致监控短暂中断。确定要继续吗？',
         '确认重新部署',
         {
           confirmButtonText: '继续部署',
@@ -307,7 +307,7 @@ const handleDeployClick = async () => {
   if (resource.value.has_credentials) {
     try {
       await ElMessageBox.confirm(
-        '检测到已保存的 SSH 凭证，是否直接使用该凭证重新部署 Agent？',
+        '检测到已保存的 SSH 凭证，是否直接使用该凭证重新部署 Alloy？',
         '确认部署',
         {
           confirmButtonText: '直接部署',
@@ -340,8 +340,25 @@ const deployWithSavedCredentials = async () => {
         ssh_private_key: '',
         backend_url: backendUrl
     }
-    await resourceApi.deployAgent(resourceId, payload)
-    ElMessage.success('Agent 部署任务已下发')
+    const res = await resourceApi.deployAlloy(resourceId, payload)
+    const { task_id } = res.data
+    ElNotification({
+      title: '部署任务已启动',
+      message: h('div', null, [
+        h('p', null, `Grafana Alloy 部署任务已后台启动 (Task ID: ${task_id})`),
+        h(ElButton, {
+          size: 'small',
+          type: 'primary',
+          style: { marginTop: '10px' },
+          onClick: () => {
+            router.push('/automation/tasks')
+            ElNotification.closeAll()
+          }
+        }, '查看进度')
+      ]),
+      type: 'success',
+      duration: 8000
+    })
     setTimeout(loadResource, 2000)
   } catch (e: unknown) {
     console.error(e)
@@ -365,8 +382,25 @@ const handleDeploy = async () => {
         ...deployForm,
         backend_url: backendUrl
     }
-    await resourceApi.deployAgent(resourceId, payload)
-    ElMessage.success('Agent 部署任务已下发')
+    const res = await resourceApi.deployAlloy(resourceId, payload)
+    const { task_id } = res.data
+    ElNotification({
+      title: '部署任务已启动',
+      message: h('div', null, [
+        h('p', null, `Grafana Alloy 部署任务已后台启动 (Task ID: ${task_id})`),
+        h(ElButton, {
+          size: 'small',
+          type: 'primary',
+          style: { marginTop: '10px' },
+          onClick: () => {
+            router.push('/automation/tasks')
+            ElNotification.closeAll()
+          }
+        }, '查看进度')
+      ]),
+      type: 'success',
+      duration: 8000
+    })
     showDeployDialog.value = false
     setTimeout(loadResource, 2000) // Reload status after delay
   } catch (e: unknown) {

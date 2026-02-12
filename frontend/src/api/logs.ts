@@ -41,11 +41,5 @@ export const logApi = {
     // Get values for a specific label
     getLabelValues(name: string) {
         return api.get<{ status: string; data: string[] }>(`/logs/label/${name}/values`)
-    },
-
-    // Deploy Promtail to a resource
-    deployPromtail(resourceId: number, lokiHost?: string) {
-        const params = lokiHost ? { loki_host: lokiHost } : {}
-        return api.post<{ task_id: number; message: string; status: string }>(`/logs/deploy/${resourceId}`, null, { params })
     }
 }

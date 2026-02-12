@@ -1,0 +1,40 @@
+// Grafana Alloy Configuration Template
+// Metrics: System metrics via Node Exporter
+prometheus.exporter.unix "node_exporter" {
+}
+
+prometheus.scrape "node_exporter" {
+  targets    = prometheus.exporter.unix.node_exporter.targets
+  forward_to = [prometheus.remote_write.prometheus.receiver]
+}
+
+prometheus.remote_write "prometheus" {
+  endpoint {
+    url = "{{ prometheus_push_url }}"
+  }
+
+  external_labels = {
+    resource_id = "{{ resource_id }}",
+    job         = "integrated-agent",
+  }
+}
+
+// Logs: System logs from /var/log/
+loki.source.file "system_logs" {
+  targets = [
+    { __path__ = "/var/log/*.log" },
+    { __path__ = "/var/log/syslog" },
+  ]
+  forward_to = [loki.write.loki.receiver]
+}
+
+loki.write "loki" {
+  endpoint {
+    url = "{{ loki_push_url }}"
+  }
+
+  external_labels = {
+    resource_id = "{{ resource_id }}",
+    job         = "varlogs",
+  }
+}

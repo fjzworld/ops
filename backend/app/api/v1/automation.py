@@ -161,8 +161,24 @@ async def execute_task(
     task.status = TaskStatus.RUNNING
     await db.commit()
     
-    # Trigger Celery task
-    run_automation_task.delay(task_id)
+    # Trigger appropriate Celery task based on task type
+    if task.task_type == "deploy_alloy":
+        # For deployment tasks, we need to pass additional parameters
+        # For simplicity, we trigger it with default settings or existing credentials
+        from app.tasks.deployment import deploy_alloy_task
+        from app.core.config import settings
+        
+        resource_id = task.target_resources[0] if task.target_resources else None
+        if not resource_id:
+            raise BadRequestException(message="Deployment task has no target resource")
+            
+        deploy_alloy_task.delay(
+            task.id,
+            resource_id,
+            settings.EXTERNAL_API_URL
+        )
+    else:
+        run_automation_task.delay(task_id)
     
     return {"message": "Task execution queued", "task_id": task_id}
 

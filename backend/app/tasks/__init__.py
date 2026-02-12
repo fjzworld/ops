@@ -1,5 +1,6 @@
 """Initialize tasks package"""
 from app.tasks.celery_app import celery_app
 from app.tasks.automation import run_automation_task
+from app.tasks.deployment import deploy_alloy_task
 
-__all__ = ["celery_app", "run_automation_task"]
+__all__ = ["celery_app", "run_automation_task", "deploy_alloy_task"]

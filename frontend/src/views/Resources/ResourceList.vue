@@ -170,7 +170,7 @@
           v-if="!editingResource"
           title="智能接入模式"
           type="info"
-          description="输入 IP 和 SSH 凭据，系统将自动探测硬件配置并部署 Agent。"
+          description="输入 IP 和 SSH 凭据，系统将自动探测硬件配置并部署 Grafana Alloy。"
           show-icon
           :closable="false"
           style="margin-bottom: 20px"

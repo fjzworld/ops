@@ -10,11 +10,7 @@
         <div class="header-right" style="display: flex; gap: 12px;">
           <el-button @click="router.push('/automation/tasks')" class="glass-button">
             <el-icon><List /></el-icon>
-            部署历史
-          </el-button>
-          <el-button type="primary" class="glow-button" @click="showDeployDialog = true">
-            <el-icon><Cpu /></el-icon>
-            部署 Promtail
+            任务历史
           </el-button>
         </div>
       </div>
@@ -149,63 +145,17 @@
         </recycle-scroller>
       </div>
     </div>
-
-    <!-- Deploy Promtail Dialog -->
-    <el-dialog
-      v-model="showDeployDialog"
-      title="部署 Promtail"
-      width="500px"
-      class="glass-dialog"
-    >
-      <el-form :model="deployForm" label-width="100px" class="glass-form" style="margin-top: 10px">
-        <el-alert
-          title="日志采集代理"
-          type="info"
-          description="选择目标资源后，系统将通过 SSH 自动部署 Promtail 采集代理。"
-          show-icon
-          :closable="false"
-          style="margin-bottom: 20px"
-        />
-        <el-form-item label="选择资源">
-          <el-select
-            v-model="deployForm.resourceId"
-            placeholder="请选择要部署的资源"
-            filterable
-            remote
-            :remote-method="searchResources"
-            :loading="resourceLoading"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="item in resourceOptions"
-              :key="item.id"
-              :label="`${item.name} (${item.ip_address})`"
-              :value="item.id"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
-
-      <div class="dialog-actions">
-        <el-button @click="showDeployDialog = false" class="glass-button">取消</el-button>
-        <el-button type="primary" :loading="deploying" @click="handleDeploy" class="glow-button">
-          立即部署
-        </el-button>
-      </div>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, h } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Cpu, Document, Top, Bottom, List } from '@element-plus/icons-vue'
+import { Search, Document, Top, Bottom, List } from '@element-plus/icons-vue'
 import { RecycleScroller } from 'vue-virtual-scroller'
-import { ElMessage, ElNotification, ElButton } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import { logApi, type LogEntry, type LogQueryParams } from '../../api/logs'
-import { resourceApi } from '../../api/resources'
-import type { Resource } from '@/types/resource'
 
 interface ScrolledLogEntry extends LogEntry {
   id: number
@@ -216,10 +166,6 @@ const router = useRouter()
 const loading = ref(false)
 const logs = ref<ScrolledLogEntry[]>([])
 const dateRange = ref<[Date, Date]>()
-const showDeployDialog = ref(false)
-const deploying = ref(false)
-const resourceLoading = ref(false)
-const resourceOptions = ref<Resource[]>([])
 const queryDuration = ref<number | null>(null)
 const scrollerRef = ref<InstanceType<typeof RecycleScroller> | null>(null)
 
@@ -237,10 +183,6 @@ const filterForm = reactive({
 const queryParams = reactive({
   query: '{job="varlogs"}',
   limit: 1000
-})
-
-const deployForm = reactive({
-  resourceId: undefined as number | undefined
 })
 
 // Date shortcuts
@@ -412,69 +354,11 @@ const handleSearch = async () => {
   }
 }
 
-const searchResources = async (_query: string) => {
-  resourceLoading.value = true
-  try {
-    const res = await resourceApi.list({ skip: 0, limit: 100 })
-    if (res.data) {
-      resourceOptions.value = res.data
-    }
-  } catch (error) {
-    console.error(error)
-    ElMessage.error('获取资源列表失败')
-  } finally {
-    resourceLoading.value = false
-  }
-}
-
-const handleDeploy = async () => {
-  if (!deployForm.resourceId) {
-    ElMessage.warning('请选择资源')
-    return
-  }
-
-  deploying.value = true
-  try {
-    const lokiHost = window.location.hostname
-    const res = await logApi.deployPromtail(deployForm.resourceId, lokiHost)
-    showDeployDialog.value = false
-    
-    const taskId = res.data.task_id
-    
-    ElNotification({
-      title: '部署任务已提交',
-      message: h('div', null, [
-        h('p', null, 'Promtail 部署任务已在后台启动。'),
-        h(ElButton, {
-          type: 'primary',
-          size: 'small',
-          style: { marginTop: '10px' },
-          onClick: () => {
-            router.push(`/automation/tasks`)
-            ElNotification.closeAll()
-          }
-        }, () => '查看任务进度')
-      ]),
-      type: 'success',
-      duration: 10000
-    })
-  } catch (error: any) {
-    console.error('Deploy error:', error)
-    showDeployDialog.value = false
-    const detail = error.response?.data?.detail || error.response?.data?.message || ''
-    const msg = detail || error.message || '部署 Promtail 失败'
-    ElMessage.error(msg)
-  } finally {
-    deploying.value = false
-  }
-}
-
 onMounted(() => {
   const end = new Date()
   const start = new Date()
   start.setTime(start.getTime() - 3600 * 1000)
   dateRange.value = [start, end]
-  searchResources('')
   loadLabelValues()
 })
 </script>

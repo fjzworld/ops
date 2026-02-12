@@ -48,8 +48,8 @@ export const resourceApi = {
         return api.post<any>('/resources/probe', credentials)
     },
 
-    deployAgent(id: number, credentials: ResourceCreateRequest) {
-        return api.post<{ message: string }>(`/resources/${id}/deploy-agent`, credentials)
+    deployAlloy(id: number, data?: any) {
+        return api.post<{ message: string; task_id?: number }>(`/resources/${id}/deploy-alloy`, data)
     },
 
     getHistory(id: number, hours: number = 24) {

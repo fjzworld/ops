@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # Loki
     LOKI_URL: str = "http://loki:3100"
 
+    # Prometheus
+    PROMETHEUS_URL: str = "http://prometheus:9090"
+
     # External Loki URL for remote Promtail agents to push logs
     # Must be reachable from target servers (e.g. http://192.168.1.100:3100)
     LOKI_EXTERNAL_URL: str = ""
