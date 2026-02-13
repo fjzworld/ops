@@ -65,6 +65,8 @@ class ResourceInDB(ResourceBase):
     updated_at: Optional[datetime] = None
     last_seen: Optional[datetime] = None
     has_credentials: bool = False
+    ssh_port: int = 22
+    ssh_username: str = "root"
     
     class Config:
         from_attributes = True

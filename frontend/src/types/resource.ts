@@ -34,6 +34,8 @@ export interface Resource {
     updated_at?: string;
     last_seen?: string;
     has_credentials: boolean;
+    ssh_port?: number;
+    ssh_username?: string;
 }
 
 export interface Metric {
@@ -107,7 +109,7 @@ export interface ResourceCreateRequest {
     backend_url?: string;
 }
 
-export interface ResourceUpdateRequest extends Partial<ResourceCreateRequest> {}
+export interface ResourceUpdateRequest extends Partial<ResourceCreateRequest> { }
 
 export interface ResourceDeleteRequest {
     uninstall_agent: boolean;

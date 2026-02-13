@@ -1,0 +1,30 @@
+# Ignore frontend directory (built separately or served by nginx container)
+frontend/
+frontend/node_modules/
+
+# Ignore version control
+.git/
+.gitignore
+
+# Ignore Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv/
+
+# Ignore Docker related
+docker-compose.yml
+docker/
+
+# Ignore IDE settings
+.vscode/
+.idea/
+
+# Ignore Documentation
+README.md
+docs/

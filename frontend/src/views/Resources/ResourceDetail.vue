@@ -10,8 +10,8 @@
         </div>
         <div class="ph-identity">
           <h2 class="resource-name">{{ resource?.name }}</h2>
-          <el-tag :type="getStatusType(resource?.status)" effect="dark" size="small">
-            {{ getStatusLabel(resource?.status) }}
+          <el-tag :type="getStatusType(resource?.status || '')" effect="dark" size="small">
+            {{ getStatusLabel(resource?.status || '') }}
           </el-tag>
         </div>
       </div>
@@ -98,7 +98,7 @@
             :show-text="false"
           />
           <div class="stat-sub">
-            {{ formatBytes(latestMetrics?.memory_used) }} / {{ formatBytes(latestMetrics?.memory_total) }}
+            {{ formatBytes(latestMetrics?.memory_used || 0) }} / {{ formatBytes(latestMetrics?.memory_total || 0) }}
           </div>
         </div>
 
@@ -113,7 +113,7 @@
               <span class="unit">%</span>
             </div>
             <div class="stat-sub" style="margin-top: 0; font-size: 12px;">
-              {{ formatBytes(latestMetrics?.disk_used) }} / {{ formatBytes(latestMetrics?.disk_total) }}
+              {{ formatBytes(latestMetrics?.disk_used || 0) }} / {{ formatBytes(latestMetrics?.disk_total || 0) }}
             </div>
           </div>
           <el-progress 
@@ -242,7 +242,6 @@ import {
   Box, Back, Monitor, Platform, Cpu, Connection, Odometer, Cloudy, VideoPlay
 } from '@element-plus/icons-vue'
 import { resourceApi } from '@/api/resources'
-import { monitoringApi } from '@/api/monitoring'
 import type { Resource, DiskPartition, ResourceMetrics } from '@/types/resource'
 
 const route = useRoute()
@@ -278,6 +277,7 @@ const handleDeployClick = async () => {
   if (!resource.value) return
 
   const showDialog = () => {
+      if (!resource.value) return
       deployForm.ssh_port = resource.value.ssh_port || 22
       deployForm.ssh_username = resource.value.ssh_username || 'root'
       deployForm.ssh_password = ''
@@ -332,8 +332,11 @@ const deployWithSavedCredentials = async () => {
   deploying.value = true
   try {
     const backendUrl = `${window.location.origin}/api/v1`
+    
+    if (!resource.value) return;
+
     const payload = {
-        ip_address: resource.value.ip_address,
+        ip_address: resource.value.ip_address || '', // Ensure string
         ssh_port: resource.value.ssh_port || 22,
         ssh_username: resource.value.ssh_username || 'root',
         ssh_password: '', // Empty, backend will use saved
@@ -428,10 +431,10 @@ const loadResource = async () => {
       memory_usage: resource.value.memory_usage || 0,
       disk_usage: resource.value.disk_usage || 0,
       // Need real values for used/total if available, otherwise estimate
-      memory_total: resource.value.memory_gb * 1024 * 1024 * 1024,
-      memory_used: (resource.value.memory_gb * 1024 * 1024 * 1024) * (resource.value.memory_usage / 100),
-      disk_total: resource.value.disk_gb * 1024 * 1024 * 1024,
-      disk_used: (resource.value.disk_gb * 1024 * 1024 * 1024) * (resource.value.disk_usage / 100)
+      memory_total: (resource.value.memory_gb || 0) * 1024 * 1024 * 1024,
+      memory_used: ((resource.value.memory_gb || 0) * 1024 * 1024 * 1024) * ((resource.value.memory_usage || 0) / 100),
+      disk_total: (resource.value.disk_gb || 0) * 1024 * 1024 * 1024,
+      disk_used: ((resource.value.disk_gb || 0) * 1024 * 1024 * 1024) * ((resource.value.disk_usage || 0) / 100)
     }
     
     // Load disk partitions
@@ -677,7 +680,7 @@ const refreshData = () => {
 
 const getStatusType = (status: string) => status === 'ACTIVE' ? 'success' : 'danger'
 const getStatusLabel = (status: string) => ({ ACTIVE: '运行中', OFFLINE: '离线', MAINTENANCE: '维护' }[status] || status)
-const getResourceTypeLabel = (type: string) => ({ PHYSICAL: '物理机', VIRTUAL: '虚拟机', CLOUD: '云主机' }[type] || type)
+// const getResourceTypeLabel = (type: string) => ({ PHYSICAL: '物理机', VIRTUAL: '虚拟机', CLOUD: '云主机' }[type] || type)
 const formatPercent = (val: number) => val ? val.toFixed(1) : '0.0'
 const formatBytes = (bytes: number) => {
   if (!bytes) return '0 B'
@@ -731,7 +734,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  clearInterval(pollTimer)
+  if (pollTimer) clearInterval(pollTimer)
   window.removeEventListener('resize', () => chartInstance?.resize())
   window.removeEventListener('resize', () => networkChartInstance?.resize())
   chartInstance?.dispose()
