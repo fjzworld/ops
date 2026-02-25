@@ -37,6 +37,29 @@ class MiddlewareUpdate(BaseModel):
 class MiddlewareAction(BaseModel):
     action: Literal["start", "stop", "restart"]
 
+class MiddlewareVerify(BaseModel):
+    """中间件验证请求"""
+    resource_id: int
+    type: str
+    port: int
+    username: Optional[str] = None
+    password_plain: Optional[str] = None
+    service_name: Optional[str] = None
+
+class MiddlewareVerifyResult(BaseModel):
+    """中间件验证结果"""
+    success: bool
+    ssh_ok: bool = True  # SSH 连接状态
+    port_reachable: bool
+    service_active: bool
+    auth_valid: bool
+    auth_message: Optional[str] = None  # 认证失败时的具体错误信息
+    log_path_found: bool = False  # 是否找到日志路径
+    suggested_log_path: Optional[str] = None  # 建议的日志路径
+    suggested_service_name: Optional[str] = None  # 自动检测到的服务名称
+    message: str
+    details: dict = {}
+
 class MiddlewareInDB(MiddlewareBase):
     id: int
     status: str

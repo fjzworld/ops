@@ -50,18 +50,18 @@ class ApiClient {
                         }
                         localStorage.removeItem('token')
                         window.location.href = '/login'
-                        ElMessage.error('登录已过期,请重新登录')
+                        ElMessage({ message: '登录已过期,请重新登录', type: 'error', grouping: true })
                     } else if (status === 403) {
-                        ElMessage.error('权限不足')
+                        ElMessage({ message: '权限不足', type: 'error', grouping: true })
                     } else if (status === 404) {
-                        ElMessage.error('资源不存在')
+                        ElMessage({ message: '资源不存在', type: 'error', grouping: true })
                     } else if (status >= 500) {
-                        ElMessage.error('服务器错误')
+                        ElMessage({ message: '服务器错误', type: 'error', grouping: true })
                     } else {
-                        ElMessage.error(data.detail || '请求失败')
+                        ElMessage({ message: data.detail || '请求失败', type: 'error', grouping: true })
                     }
                 } else {
-                    ElMessage.error('网络错误')
+                    ElMessage({ message: '网络错误', type: 'error', grouping: true })
                 }
 
                 return Promise.reject(error)

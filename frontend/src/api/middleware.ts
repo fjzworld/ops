@@ -1,10 +1,12 @@
 import api from './client'
-import type { 
-    Middleware, 
-    MiddlewareCreate, 
-    MiddlewareUpdate, 
-    MiddlewareAction, 
-    MiddlewareListParams 
+import type {
+    Middleware,
+    MiddlewareCreate,
+    MiddlewareUpdate,
+    MiddlewareAction,
+    MiddlewareListParams,
+    MiddlewareVerify,
+    MiddlewareVerifyResult
 } from '@/types/middleware'
 
 export const middlewareApi = {
@@ -34,5 +36,9 @@ export const middlewareApi = {
 
     controlMiddleware(id: number, data: MiddlewareAction) {
         return api.post<{ message: string; status: string }>(`/middlewares/${id}/action`, data)
+    },
+
+    verifyMiddleware(data: MiddlewareVerify) {
+        return api.post<MiddlewareVerifyResult>('/middlewares/verify', data)
     }
 }

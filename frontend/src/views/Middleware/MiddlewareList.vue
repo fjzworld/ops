@@ -146,13 +146,8 @@
                   <el-input-number v-model="middlewareForm.port" :min="1" :max="65535" style="width: 100%" />
                 </el-form-item>
             </el-col>
-            <el-col :span="12">
-                <el-form-item label="服务名称">
-                  <el-input v-model="middlewareForm.service_name" placeholder="systemd service name" />
-                </el-form-item>
-            </el-col>
-        </el-row>
 
+        </el-row>
         <el-row :gutter="20">
             <el-col :span="12">
                 <el-form-item label="用户名">
@@ -166,14 +161,85 @@
             </el-col>
         </el-row>
 
-        <el-form-item label="日志路径">
-          <el-input v-model="middlewareForm.log_path" placeholder="/var/log/mysql/error.log" />
+        <!-- 日志路径输入框 - 默认隐藏，验证后根据结果显示 -->
+        <el-form-item v-if="showLogPathInput" label="日志路径">
+          <el-input v-model="middlewareForm.log_path" placeholder="/var/log/mysql/error.log">
+            <template #suffix>
+              <el-tag v-if="autoFilledLogPath" type="success" size="small" effect="dark" class="auto-fill-tag">
+                已自动获取
+              </el-tag>
+            </template>
+          </el-input>
         </el-form-item>
+
+        <!-- 服务名称输入框 - 默认隐藏，验证后根据结果显示 -->
+        <el-form-item v-if="showServiceNameInput" label="服务名称">
+          <el-input v-model="middlewareForm.service_name" placeholder="mysqld">
+            <template #suffix>
+              <el-tag v-if="autoFilledServiceName" type="success" size="small" effect="dark" class="auto-fill-tag">
+                已自动获取
+              </el-tag>
+            </template>
+          </el-input>
+        </el-form-item>
+
+        <!-- 验证结果展示 -->
+        <div v-if="verifyResult" class="verify-result" :class="verifyResult.success ? 'success' : 'error'">
+          <div class="verify-header">
+            <el-icon v-if="verifyResult.success" color="#22c55e"><SuccessFilled /></el-icon>
+            <el-icon v-else color="#ef4444"><CircleCloseFilled /></el-icon>
+            <span class="verify-title">{{ verifyResult.success ? '验证通过' : '验证失败' }}</span>
+          </div>
+          <div class="verify-details">
+            <div class="verify-item">
+              <span class="label">SSH连接:</span>
+              <el-tag :type="verifyResult.ssh_ok ? 'success' : 'danger'" size="small">
+                {{ verifyResult.ssh_ok ? '成功' : '失败' }}
+              </el-tag>
+            </div>
+            <div class="verify-item">
+              <span class="label">端口监听:</span>
+              <el-tag :type="verifyResult.port_reachable ? 'success' : 'danger'" size="small">
+                {{ verifyResult.port_reachable ? '正常' : '未监听' }}
+              </el-tag>
+            </div>
+            <div class="verify-item">
+              <span class="label">服务状态:</span>
+              <el-tag :type="verifyResult.service_active ? 'success' : 'danger'" size="small">
+                {{ verifyResult.service_active ? '运行中' : '未运行' }}
+              </el-tag>
+            </div>
+            <div class="verify-item">
+              <span class="label">认证验证:</span>
+              <el-tag :type="verifyResult.auth_valid ? 'success' : 'danger'" size="small">
+                {{ verifyResult.auth_valid ? '成功' : '失败' }}
+              </el-tag>
+              <span v-if="!verifyResult.auth_valid && verifyResult.auth_message" class="error-hint">
+                {{ verifyResult.auth_message }}
+              </span>
+            </div>
+            <div class="verify-item">
+              <span class="label">日志路径:</span>
+              <el-tag :type="verifyResult.log_path_found ? 'success' : 'warning'" size="small">
+                {{ verifyResult.log_path_found ? '已发现' : '未找到' }}
+              </el-tag>
+              <span v-if="verifyResult.suggested_log_path" class="log-path-hint">
+                {{ verifyResult.suggested_log_path }}
+              </span>
+            </div>
+            <div v-if="!verifyResult.success" class="verify-message">
+              {{ verifyResult.message }}
+            </div>
+          </div>
+        </div>
 
       </el-form>
 
       <div class="dialog-actions">
         <el-button @click="showCreateDialog = false" class="glass-button">取消</el-button>
+        <el-button type="warning" @click="handleVerify" :loading="verifying" class="glass-button">
+          <el-icon><Connection /></el-icon> 验证配置
+        </el-button>
         <el-button type="primary" @click="handleSave" :loading="saving" class="glow-button">
           {{ editingMiddleware ? '保存修改' : '立即添加' }}
         </el-button>
@@ -185,16 +251,23 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Edit, Delete, Monitor } from '@element-plus/icons-vue'
+import { Plus, Search, Edit, Delete, Monitor, Connection, SuccessFilled, CircleCloseFilled } from '@element-plus/icons-vue'
 import { middlewareApi } from '@/api/middleware'
 import { resourceApi } from '@/api/resources'
+import type { MiddlewareVerifyResult } from '@/types/middleware'
 
 const loading = ref(false)
 const saving = ref(false)
+const verifying = ref(false)
 const middlewares = ref<any[]>([])
 const resourceList = ref<any[]>([])
 const showCreateDialog = ref(false)
 const editingMiddleware = ref<any>(null)
+const verifyResult = ref<MiddlewareVerifyResult | null>(null)
+const autoFilledLogPath = ref(false)  // 标记日志路径是否为自动填充
+const showLogPathInput = ref(false)
+const autoFilledServiceName = ref(false)
+const showServiceNameInput = ref(false)
 
 const filters = reactive({ type: '', status: '' })
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
@@ -255,7 +328,12 @@ const resetForm = () => {
   middlewareForm.password = ''
   middlewareForm.service_name = ''
   middlewareForm.log_path = ''
+  verifyResult.value = null
+  autoFilledLogPath.value = false
+  showLogPathInput.value = false  // 重置时隐藏日志路径输入框
 }
+  autoFilledServiceName.value = false
+  showServiceNameInput.value = false
 
 const openCreateDialog = () => {
   editingMiddleware.value = null
@@ -264,6 +342,76 @@ const openCreateDialog = () => {
   // Ensure resources are loaded
   if (resourceList.value.length === 0) {
       loadResources()
+  }
+}
+
+const handleVerify = async () => {
+  if (saving.value || verifying.value) return
+  if (!middlewareForm.resource_id) {
+    ElMessage.warning('请先选择资源')
+    return
+  }
+  if (!middlewareForm.port) {
+    ElMessage.warning('请填写端口')
+    return
+  }
+
+  verifying.value = true
+  verifyResult.value = null
+  try {
+    const { data } = await middlewareApi.verifyMiddleware({
+      resource_id: middlewareForm.resource_id,
+      type: middlewareForm.type,
+      port: middlewareForm.port,
+      username: middlewareForm.username || undefined,
+      password_plain: middlewareForm.password || undefined,
+      service_name: middlewareForm.service_name || undefined
+    })
+    verifyResult.value = data
+
+    // 根据日志路径探测结果显示输入框
+    if (data.suggested_log_path) {
+      // 找到日志路径，自动填充
+      middlewareForm.log_path = data.suggested_log_path
+      autoFilledLogPath.value = true
+      showLogPathInput.value = true
+      ElMessage.success('已自动检测到日志路径')
+    } else if (data.log_path_found === false) {
+      // 未找到日志路径，显示输入框让用户手动填写
+      showLogPathInput.value = true
+      ElMessage.info('未找到日志路径，请手动填写')
+    }
+
+    // 自动填充检测到的服务名称
+    if (data.suggested_service_name && !middlewareForm.service_name) {
+      middlewareForm.service_name = data.suggested_service_name
+      autoFilledServiceName.value = true
+      showServiceNameInput.value = true
+        ElMessage.success(`已自动检测到服务名称: ${data.suggested_service_name}`)
+    } else if (!middlewareForm.service_name) {
+      // 未检测到服务名称，显示输入框让用户手动填写
+      showServiceNameInput.value = true
+      ElMessage.info('未检测到服务名称，如需服务操作请手动填写')
+    }
+    if (data.success) {
+      ElMessage.success('配置验证通过')
+    } else {
+      ElMessage.warning('配置验证失败，请检查详细信息')
+    }
+  } catch (error) {
+    ElMessage.error('验证请求失败')
+    verifyResult.value = {
+      success: false,
+      ssh_ok: false,
+      port_reachable: false,
+      service_active: false,
+      auth_valid: false,
+      log_path_found: false,
+      message: '验证请求失败，请检查网络连接',
+      details: {}
+    }
+  } finally {
+    verifying.value = false
   }
 }
 
@@ -280,13 +428,18 @@ const handleEdit = (row: any) => {
     // Password is usually not returned or shouldn't be prefilled for security unless necessary
   })
   
+  // 编辑模式下，如果有日志路径则显示输入框
+  showLogPathInput.value = !!row.log_path
   showCreateDialog.value = true
+  // 编辑模式下，如果有服务名称则显示输入框
+  showServiceNameInput.value = !!row.service_name
   if (resourceList.value.length === 0) {
       loadResources()
   }
 }
 
 const handleSave = async () => {
+  if (saving.value || verifying.value) return
   if (!middlewareForm.name || !middlewareForm.resource_id) {
     ElMessage.warning('请填写必要信息')
     return
@@ -305,7 +458,7 @@ const handleSave = async () => {
     loadMiddlewares()
   } catch (error) {
     console.error(error)
-    ElMessage.error('保存失败')
+    // Removed duplicate ElMessage.error('保存失败') as client.ts interceptor handles it
   } finally {
     saving.value = false
   }
@@ -463,6 +616,85 @@ onMounted(() => {
   justify-content: flex-end;
   gap: 12px;
   margin-top: 24px;
+}
+
+.verify-result {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid;
+}
+
+.verify-result.success {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.verify-result.error {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.verify-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.verify-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.verify-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.verify-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.verify-item .label {
+  color: #94A3B8;
+  font-size: 13px;
+  min-width: 80px;
+}
+
+.error-hint {
+  color: #fca5a5;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.log-path-hint {
+  color: #86efac;
+  font-size: 12px;
+  font-family: 'Fira Code', monospace;
+  margin-left: 8px;
+}
+
+.auto-fill-tag {
+  animation: pulse 1s ease-in-out;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.verify-message {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  color: #fca5a5;
+  font-size: 13px;
 }
 
 :deep(.el-input__wrapper),

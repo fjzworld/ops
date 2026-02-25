@@ -313,11 +313,421 @@ class ResourceDetector:
             return result
         finally:
             self.close()
-    
+
     def close(self) -> None:
         """Close SSH connection"""
         if self.client:
             self.client.close()
+
+    def detect_service_name(self, mw_type: str) -> Optional[str]:
+        """
+        根据中间件类型自动检测服务名称
+        Returns: 检测到的服务名称，如果未检测到返回 None
+        """
+        # 定义每种类型可能的服务名称列表
+        service_candidates = {
+            'mysql': ['mysqld', 'mysql'],
+            'redis': ['redis-server', 'redis'],
+            'nginx': ['nginx'],
+            'postgresql': ['postgresql', 'postgres'],
+            'mongodb': ['mongod', 'mongodb'],
+        }
+
+        candidates = service_candidates.get(mw_type, [])
+        
+        for svc_name in candidates:
+            try:
+                # 检查服务是否存在
+                output = self.execute_command(f"systemctl list-unit-files {svc_name}.service 2>/dev/null | grep -q {svc_name} && echo 'found'")
+                if output and 'found' in output:
+                    logger.info(f"Detected service name: {svc_name} for type: {mw_type}")
+                    return svc_name
+            except Exception as e:
+                logger.debug(f"Service {svc_name} not found: {e}")
+                continue
+
+        return None
+
+    def control_service(self, service_name: str, action: str) -> Dict[str, any]:
+        """
+        控制服务 (start/stop/restart)
+        Returns: {
+            "success": bool,
+            "message": str,
+            "output": str
+        }
+        """
+        result = {
+            "success": False,
+            "message": "",
+            "output": ""
+        }
+
+        if action not in ["start", "stop", "restart"]:
+            result["message"] = f"不支持的操作: {action}"
+            return result
+
+        try:
+            self.connect()
+
+            # 执行 systemctl 命令
+            cmd = f"sudo systemctl {action} {service_name} 2>&1"
+            logger.info(f"Executing: {cmd}")
+            stdin, stdout, stderr = self.client.exec_command(cmd)
+            output = stdout.read().decode('utf-8').strip()
+            exit_status = stdout.channel.recv_exit_status()
+
+            result["output"] = output
+
+            if exit_status == 0:
+                result["success"] = True
+                result["message"] = f"服务 {service_name} {action} 成功"
+            else:
+                result["message"] = f"服务 {service_name} {action} 失败: {output}"
+
+        except Exception as e:
+            result["message"] = f"执行服务操作失败: {str(e)}"
+            logger.error(f"Service control failed: {e}")
+        finally:
+            self.close()
+
+        return result
+
+    def verify_middleware(
+        self,
+        mw_type: str,
+        port: int,
+        service_name: str = None,
+        username: str = None,
+        password: str = None
+    ) -> Dict[str, any]:
+        """
+        验证中间件配置是否正确
+        Returns: {
+            "success": bool,
+            "port_reachable": bool,
+            "service_active": bool,
+            "auth_valid": bool,
+            "message": str,
+            "details": dict
+        }
+        """
+        result = {
+            "success": False,
+            "port_reachable": False,
+            "service_active": False,
+            "auth_valid": False,
+            "message": "",
+            "details": {}
+        }
+
+        try:
+            self.connect()
+
+            # 1. 检查端口是否监听
+            port_check_cmd = f"ss -tlnp | grep ':{port}' || netstat -tlnp 2>/dev/null | grep ':{port}'"
+            port_output = self.execute_command(port_check_cmd)
+
+            if port_output and str(port) in port_output:
+                result["port_reachable"] = True
+                result["details"]["port_info"] = port_output.strip()
+            else:
+                result["message"] = f"端口 {port} 未监听，请检查服务是否启动"
+                return result
+
+            # 2. 检查服务状态
+            if service_name:
+                try:
+                    service_status = self.execute_command(f"systemctl is-active {service_name} 2>/dev/null || echo 'unknown'")
+                    service_status = service_status.strip()
+
+                    if service_status == "active":
+                        result["service_active"] = True
+                        result["details"]["service_status"] = "active"
+                    elif service_status in ("inactive", "dead"):
+                        result["details"]["service_status"] = "inactive"
+                        result["message"] = f"服务 {service_name} 未运行 (状态: {service_status})"
+                        return result
+                    elif service_status == "failed":
+                        result["details"]["service_status"] = "failed"
+                        result["message"] = f"服务 {service_name} 启动失败"
+                        return result
+                    else:
+                        # 服务名可能不存在，但端口在监听，继续验证
+                        result["service_active"] = True
+                        result["details"]["service_status"] = "unknown (port is listening)"
+                except Exception as e:
+                    result["details"]["service_check_error"] = str(e)
+                    # 服务检查失败但端口在监听，继续
+                    result["service_active"] = True
+            else:
+                # 没有服务名，尝试自动检测
+                detected_service = self.detect_service_name(mw_type)
+                if detected_service:
+                    result["details"]["detected_service_name"] = detected_service
+                    # 使用检测到的服务名检查状态
+                    try:
+                        service_status = self.execute_command(f"systemctl is-active {detected_service} 2>/dev/null || echo 'unknown'")
+                        service_status = service_status.strip()
+                        if service_status == "active":
+                            result["service_active"] = True
+                            result["details"]["service_status"] = "active"
+                        else:
+                            result["service_active"] = True
+                            result["details"]["service_status"] = f"{service_status} (auto-detected)"
+                    except Exception as e:
+                        result["service_active"] = True
+                        result["details"]["service_status"] = f"check failed (auto-detected: {detected_service})"
+                else:
+                    # 未检测到服务名，跳过服务检查
+                    result["service_active"] = True
+                    result["details"]["service_status"] = "skipped (no service name detected)"
+
+            # 3. 验证认证信息
+            if mw_type == 'mysql':
+                auth_result = self._verify_mysql_auth(port, username, password)
+                result["auth_valid"] = auth_result["success"]
+                result["details"]["auth_test"] = auth_result
+                if not auth_result["success"]:
+                    result["message"] = auth_result.get("error", "MySQL认证失败")
+                    return result
+
+            elif mw_type == 'redis':
+                auth_result = self._verify_redis_auth(port, password)
+                result["auth_valid"] = auth_result["success"]
+                result["details"]["auth_test"] = auth_result
+                if not auth_result["success"]:
+                    result["message"] = auth_result.get("error", "Redis认证失败")
+                    return result
+            else:
+                # 其他类型，跳过认证验证
+                result["auth_valid"] = True
+                result["details"]["auth_test"] = "skipped"
+
+            # 全部验证通过
+            result["success"] = True
+            result["message"] = "验证通过"
+
+        except ConnectionError as e:
+            result["message"] = f"SSH连接失败: {str(e)}"
+        except Exception as e:
+            result["message"] = f"验证过程出错: {str(e)}"
+            logger.error(f"Middleware verification failed: {e}")
+        finally:
+            self.close()
+
+        return result
+
+    def _verify_mysql_auth(self, port: int, username: str = None, password: str = None) -> Dict[str, any]:
+        """验证MySQL认证"""
+        result = {"success": False, "error": ""}
+
+        if not username:
+            username = "root"
+
+        pass_arg = f"-p'{password}'" if password else ""
+        cmds = ["mysqladmin", "/usr/bin/mysqladmin", "/usr/local/mysql/bin/mysqladmin"]
+
+        for binary in cmds:
+            cmd = f"{binary} -u{username} {pass_arg} -P{port} -h127.0.0.1 status 2>&1"
+            try:
+                stdin, stdout, stderr = self.client.exec_command(cmd)
+                output = stdout.read().decode('utf-8').strip()
+                error = stderr.read().decode('utf-8').strip()
+
+                if "Uptime" in output:
+                    result["success"] = True
+                    result["output"] = output
+                    return result
+                elif "Access denied" in output or "Access denied" in error:
+                    result["error"] = "用户名或密码错误"
+                    return result
+            except Exception as e:
+                continue
+
+        result["error"] = "无法连接到MySQL服务，请检查配置"
+        return result
+
+    def _verify_redis_auth(self, port: int, password: str = None) -> Dict[str, any]:
+        """验证Redis认证"""
+        result = {"success": False, "error": ""}
+
+        auth_arg = f"-a '{password}'" if password else ""
+        cmds = ["redis-cli", "/usr/bin/redis-cli", "/usr/local/bin/redis-cli"]
+
+        for binary in cmds:
+            cmd = f"{binary} -h 127.0.0.1 -p {port} {auth_arg} ping 2>&1"
+            try:
+                stdin, stdout, stderr = self.client.exec_command(cmd)
+                output = stdout.read().decode('utf-8').strip()
+
+                if "PONG" in output.upper() or "pong" in output.lower():
+                    result["success"] = True
+                    result["output"] = output
+                    return result
+                elif "NOAUTH" in output or "Authentication" in output:
+                    result["error"] = "Redis需要认证，请提供密码"
+                    return result
+                elif "WRONGPASS" in output or "invalid password" in output.lower():
+                    result["error"] = "Redis密码错误"
+                    return result
+            except Exception as e:
+                continue
+
+        result["error"] = "无法连接到Redis服务，请检查配置"
+        return result
+
+    def detect_log_path(self, mw_type: str, service_name: str = None) -> Dict[str, any]:
+        """
+        自动探测中间件日志路径
+        Returns: {
+            "found": bool,
+            "path": str or None,
+            "candidates": list  # 候选路径列表
+        }
+        """
+        result = {
+            "found": False,
+            "path": None,
+            "candidates": []
+        }
+
+        # 确保SSH连接已建立
+        need_close = False
+        try:
+            # 检查连接是否有效（不仅仅是 client 是否存在）
+            if not self.client or not self.client.get_transport() or not self.client.get_transport().is_active():
+                self.connect()
+                need_close = True
+        except Exception as e:
+            logger.warning(f"Failed to establish SSH connection for log detection: {e}")
+            return result
+
+        try:
+            if mw_type == 'mysql':
+                # 方案1: 从进程参数提取 --log-error
+                try:
+                    ps_output = self.execute_command("ps aux | grep mysqld | grep -v grep")
+                    logger.info(f"[LogDetect] MySQL ps output: {ps_output[:200] if ps_output else 'empty'}")
+                    if ps_output:
+                        # 尝试提取 --log-error 参数
+                        log_match = re.search(r'--log-error[=\s]+([^\s]+)', ps_output)
+                        if log_match:
+                            log_path = log_match.group(1).strip()
+                            logger.info(f"[LogDetect] Found --log-error param: {log_path}")
+                            # 验证文件是否存在
+                            check_cmd = f"test -f '{log_path}' && echo 'exists'"
+                            if self.execute_command(check_cmd).strip() == 'exists':
+                                result["found"] = True
+                                result["path"] = log_path
+                                result["candidates"].append(log_path)
+                                logger.info(f"[LogDetect] Log file exists: {log_path}")
+                except Exception as e:
+                    logger.warning(f"[LogDetect] MySQL ps check failed: {e}")
+
+                # 方案2: 检查常见路径
+                common_paths = [
+                    "/var/log/mysql/error.log",
+                    "/var/log/mysqld.log",
+                    "/var/lib/mysql/$(hostname).err",
+                    "/usr/local/mysql/data/$(hostname).err"
+                ]
+
+                for path in common_paths:
+                    try:
+                        # 替换 $(hostname)
+                        actual_path = path.replace("$(hostname)", self.execute_command("hostname"))
+                        check_cmd = f"test -f '{actual_path}' && echo 'exists'"
+                        exists = self.execute_command(check_cmd).strip() == 'exists'
+                        logger.info(f"[LogDetect] Check path {actual_path}: {'exists' if exists else 'not found'}")
+                        if exists:
+                            if actual_path not in result["candidates"]:
+                                result["candidates"].append(actual_path)
+                                if not result["found"]:
+                                    result["found"] = True
+                                    result["path"] = actual_path
+                    except Exception as e:
+                        logger.warning(f"[LogDetect] Check path {path} failed: {e}")
+                        continue
+
+            elif mw_type == 'redis':
+                # 方案1: 从配置文件提取 logfile
+                try:
+                    # 查找 redis 配置文件
+                    config_paths = [
+                        "/etc/redis/redis.conf",
+                        "/etc/redis.conf",
+                        "/usr/local/etc/redis/redis.conf"
+                    ]
+                    for config_path in config_paths:
+                        try:
+                            check_cmd = f"test -f '{config_path}' && echo 'exists'"
+                            if self.execute_command(check_cmd).strip() == 'exists':
+                                grep_cmd = f"grep '^logfile' {config_path} | head -1"
+                                logfile_line = self.execute_command(grep_cmd)
+                                if logfile_line and 'logfile' in logfile_line:
+                                    # 解析 logfile 路径
+                                    log_path = logfile_line.split('logfile')[-1].strip().strip('"').strip("'")
+                                    if log_path and log_path != '""' and log_path != "''":
+                                        # 验证文件是否存在
+                                        check_cmd = f"test -f '{log_path}' && echo 'exists'"
+                                        if self.execute_command(check_cmd).strip() == 'exists':
+                                            result["found"] = True
+                                            result["path"] = log_path
+                                            result["candidates"].append(log_path)
+                                            break
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+
+                # 方案2: 检查常见路径
+                common_paths = [
+                    "/var/log/redis/redis-server.log",
+                    "/var/log/redis/redis.log",
+                    "/var/log/redis_6379.log",
+                    "/var/log/redis/redis-6379.log"
+                ]
+
+                for path in common_paths:
+                    try:
+                        check_cmd = f"test -f '{path}' && echo 'exists'"
+                        if self.execute_command(check_cmd).strip() == 'exists':
+                            if path not in result["candidates"]:
+                                result["candidates"].append(path)
+                                if not result["found"]:
+                                    result["found"] = True
+                                    result["path"] = path
+                    except Exception:
+                        continue
+
+            elif mw_type == 'sentinel':
+                # Sentinel 日志通常与 Redis 类似
+                common_paths = [
+                    "/var/log/redis/redis-sentinel.log",
+                    "/var/log/redis/sentinel.log"
+                ]
+
+                for path in common_paths:
+                    try:
+                        check_cmd = f"test -f '{path}' && echo 'exists'"
+                        if self.execute_command(check_cmd).strip() == 'exists':
+                            if path not in result["candidates"]:
+                                result["candidates"].append(path)
+                                if not result["found"]:
+                                    result["found"] = True
+                                    result["path"] = path
+                    except Exception:
+                        continue
+
+        except Exception as e:
+            logger.warning(f"Log path detection failed: {e}")
+        finally:
+            # 如果是本方法建立的连接，则关闭它
+            if need_close:
+                self.close()
+
+        return result
 
 
 def probe_server(credentials: SSHCredentials) -> ServerInfo:
