@@ -9,6 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from functools import wraps
 from fastapi import Request, HTTPException
+from fastapi.responses import JSONResponse
 import redis
 
 logger = logging.getLogger(__name__)
@@ -88,7 +89,10 @@ def check_rate_limit(request: Request, max_requests: int = 60, window: int = 60)
 # Exception handler for rate limit exceeded
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     """Custom handler for rate limit exceeded"""
-    return HTTPException(
+    return JSONResponse(
         status_code=429,
-        detail="Too many requests. Please slow down."
+        content={
+            "code": 429,
+            "message": "Too many requests. Please slow down."
+        }
     )

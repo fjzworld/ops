@@ -4,6 +4,9 @@ from typing import Optional
 import base64
 import os
 import hashlib
+import logging
+
+logger = logging.getLogger(__name__)
 
 # 获取或生成一个用于加密的 Key
 # 在生产环境中，这应该是一个独立的 Secret，从环境变量读取 ENCRYPTION_KEY
@@ -43,5 +46,5 @@ def decrypt_string(text: str) -> Optional[str]:
         return cipher.decrypt(text.encode()).decode()
     except Exception as e:
         # 解密失败（密钥不匹配或数据损坏），返回 None
-        print(f"[WARNING] Decryption failed: {e}")
+        logger.warning(f"Decryption failed: {e}")
         return None

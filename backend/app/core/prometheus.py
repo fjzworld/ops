@@ -46,6 +46,41 @@ class PrometheusClient:
             logger.error(f"Unexpected error querying Prometheus range: {e}")
             return []
 
+    async def query(self, query: str) -> List[dict]:
+        """
+        Execute an instant query against Prometheus.
+
+        Args:
+            query: PromQL query string
+
+        Returns:
+            List of result dicts from Prometheus API
+        """
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    self.query_url,
+                    params={"query": query}
+                )
+
+                if response.status_code != 200:
+                    logger.error(f"Prometheus query failed with status {response.status_code}: {response.text}")
+                    return []
+
+                data = response.json()
+                if data.get("status") != "success":
+                    logger.error(f"Prometheus API returned error: {data.get('error', 'Unknown error')}")
+                    return []
+
+                return data.get("data", {}).get("result", [])
+
+        except httpx.RequestError as e:
+            logger.error(f"Connection error to Prometheus at {self.base_url}: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error querying Prometheus: {e}")
+            return []
+
     async def query_active_resources(self, window: str = "2m") -> List[int]:
         """
         Query Prometheus for active resources within the specified window.

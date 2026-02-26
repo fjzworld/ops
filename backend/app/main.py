@@ -38,9 +38,9 @@ async def lifespan(app: FastAPI):
             tasks = result.scalars().all()
             for task in tasks:
                 SchedulerService.sync_task(task)
-            print(f"Synced {len(tasks)} tasks to scheduler")
+            logger.info(f"Synced {len(tasks)} tasks to scheduler")
         except Exception as e:
-            print(f"Error syncing tasks on startup: {e}")
+            logger.error(f"Error syncing tasks on startup: {e}")
     
     yield
 
@@ -135,7 +135,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     
     # 记录详细错误日志（用于调试）
     error_trace = traceback.format_exc()
-    print(f"[ERROR] {request.method} {request.url}: {str(exc)}\n{error_trace}")
+    logger.error(f"{request.method} {request.url}: {str(exc)}\n{error_trace}")
     
     # 生产环境返回通用错误，开发环境返回详细信息
     if settings.DEBUG:
