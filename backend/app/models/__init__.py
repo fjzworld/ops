@@ -4,6 +4,7 @@ from app.models.resource import Resource, ResourceType, ResourceStatus
 from app.models.alert import Alert, AlertRule, AlertSeverity, AlertStatus
 from app.models.task import Task, TaskStatus
 from app.models.middleware import Middleware
+from app.models.audit_log import AuditLog
 
 __all__ = [
     "User",
@@ -17,4 +18,5 @@ __all__ = [
     "Task",
     "TaskStatus",
     "Middleware",
+    "AuditLog",
 ]
