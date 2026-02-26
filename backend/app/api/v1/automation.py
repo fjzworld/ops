@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from typing import List
+from typing import List, Optional
 from app.core.database import get_async_db
 from app.models.user import User
 from app.models.task import Task, TaskStatus, TaskExecution
@@ -18,11 +18,18 @@ router = APIRouter()
 
 @router.get("/tasks", response_model=List[TaskInDB])
 async def list_tasks(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_async_db)
 ):
-    """List all automation tasks"""
-    result = await db.execute(select(Task).options(selectinload(Task.executions)))
+    """List all automation tasks with pagination"""
+    result = await db.execute(
+        select(Task)
+        .options(selectinload(Task.executions))
+        .offset(skip)
+        .limit(limit)
+    )
     tasks = result.scalars().all()
     return tasks
 

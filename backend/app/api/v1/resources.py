@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.core.database import get_async_db
 from app.core.exceptions import NotFoundException, BadRequestException, PermissionDeniedException, InternalServerError
 from app.models.user import User
@@ -341,7 +341,7 @@ async def get_metrics_history(
     
     prom_client = PrometheusClient()
     
-    end = datetime.utcnow().timestamp()
+    end = datetime.now(timezone.utc).timestamp()
     start = end - (hours * 3600)
     if hours <= 6:
         step = "1m"
@@ -393,16 +393,11 @@ async def get_disk_partitions(
     size_query = f'node_filesystem_size_bytes{{{common_filter}}}'
     avail_query = f'node_filesystem_avail_bytes{{{common_filter}}}'
     
-    import httpx
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        res_usage = await client.get(prom_client.query_url, params={"query": usage_query})
-        res_size = await client.get(prom_client.query_url, params={"query": size_query})
-        res_avail = await client.get(prom_client.query_url, params={"query": avail_query})
-        
-        usage_data = res_usage.json().get("data", {}).get("result", [])
-        size_data = res_size.json().get("data", {}).get("result", [])
-        avail_data = res_avail.json().get("data", {}).get("result", [])
-        
+    usage_data, size_data, avail_data = await asyncio.gather(
+        prom_client.query(usage_query),
+        prom_client.query(size_query),
+        prom_client.query(avail_query),
+    )
     partitions = {}
     
     for item in usage_data:
