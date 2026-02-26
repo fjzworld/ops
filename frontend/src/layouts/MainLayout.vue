@@ -22,17 +22,13 @@
           <span>中间件管理</span>
         </el-menu-item>
 
-        <el-menu-item index="/automation">
-          <el-icon><Cpu /></el-icon>
-          <span>自动化运维</span>
+        <el-menu-item index="/deploy">
+          <el-icon><Upload /></el-icon>
+          <span>代码部署</span>
         </el-menu-item>
         <el-menu-item index="/logs">
           <el-icon><Document /></el-icon>
           <span>日志中心</span>
-        </el-menu-item>
-        <el-menu-item index="/deploy">
-          <el-icon><Upload /></el-icon>
-          <span>代码部署</span>
         </el-menu-item>
         <el-sub-menu index="/alerts">
           <template #title>
@@ -80,7 +76,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { DataLine, Bell, User, Box, Coin, Cpu, Document, Upload } from '@element-plus/icons-vue'
+import { DataLine, Bell, User, Box, Coin, Document, Upload } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -93,7 +89,6 @@ const pageTitle = computed(() => {
     '/dashboard': '仪表盘',
     '/resources': '资源管理',
     '/middlewares': '中间件管理',
-    '/automation': '自动化运维',
     '/logs': '日志中心',
     '/deploy': '代码部署',
     '/alerts': '告警列表',
