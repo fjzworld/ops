@@ -8,7 +8,7 @@ import Icons from 'unplugin-icons/vite'
 import IconsResolver from 'unplugin-icons/resolver'
 
 // https://vitejs.dev/config/
-console.log('VITE_API_TARGET:', process.env.VITE_API_TARGET)
+
 export default defineConfig({
     plugins: [
         vue(),

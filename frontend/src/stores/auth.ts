@@ -1,41 +1,52 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
 import type { LoginData, User } from '@/types/user'
 
 export const useAuthStore = defineStore('auth', () => {
     const user = ref<User | null>(null)
-    const token = ref<string | null>(localStorage.getItem('token'))
+    // Track login state locally (cookie is httpOnly, so JS can't read it)
+    const loggedIn = ref<boolean>(!!localStorage.getItem('logged_in'))
 
     const login = async (credentials: LoginData) => {
-        const { data } = await authApi.login(credentials)
-        token.value = data.access_token
-        localStorage.setItem('token', data.access_token)
+        await authApi.login(credentials)
+        // Mark as logged in (the actual token is in httpOnly cookie)
+        loggedIn.value = true
+        localStorage.setItem('logged_in', '1')
         await fetchCurrentUser()
     }
 
-    const logout = () => {
+    const logout = async () => {
+        try {
+            await authApi.logout()
+        } catch {
+            // Ignore errors during logout API call
+        }
         user.value = null
-        token.value = null
-        localStorage.removeItem('token')
+        loggedIn.value = false
+        localStorage.removeItem('logged_in')
     }
 
     const fetchCurrentUser = async () => {
         try {
             const { data } = await authApi.getCurrentUser()
             user.value = data
-        } catch (error) {
-            logout()
+            loggedIn.value = true
+            localStorage.setItem('logged_in', '1')
+        } catch {
+            user.value = null
+            loggedIn.value = false
+            localStorage.removeItem('logged_in')
         }
     }
 
-    const isAuthenticated = () => {
-        return !!token.value
-    }
+    const isAuthenticated = computed(() => {
+        return loggedIn.value
+    })
 
     return {
         user,
-        token,
+        loggedIn,
         login,
         logout,
         fetchCurrentUser,

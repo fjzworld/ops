@@ -13,6 +13,7 @@ class ApiClient {
         this.instance = axios.create({
             baseURL,
             timeout: 30000,
+            withCredentials: true,  // Send httpOnly cookies automatically
             headers: {
                 'Content-Type': 'application/json'
             }
@@ -25,10 +26,9 @@ class ApiClient {
         // Request interceptor
         this.instance.interceptors.request.use(
             (config) => {
-                const token = localStorage.getItem('token')
-                if (token) {
-                    config.headers.Authorization = `Bearer ${token}`
-                }
+                // Token is now sent automatically via httpOnly cookie.
+                // No manual Authorization header needed for cookie-based auth.
+                // Swagger UI still uses the token from login response via OAuth2 header.
                 return config
             },
             (error) => {
@@ -48,7 +48,8 @@ class ApiClient {
                         if (error.config?.url?.includes('/auth/login')) {
                             return Promise.reject(error)
                         }
-                        localStorage.removeItem('token')
+                        // Clear login state and redirect
+                        localStorage.removeItem('logged_in')
                         window.location.href = '/login'
                         ElMessage({ message: '登录已过期,请重新登录', type: 'error', grouping: true })
                     } else if (status === 403) {
@@ -69,23 +70,23 @@ class ApiClient {
         )
     }
 
-    get<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+    get<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
         return this.instance.get(url, config)
     }
 
-    post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+    post<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
         return this.instance.post(url, data, config)
     }
 
-    put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+    put<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
         return this.instance.put(url, data, config)
     }
 
-    delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+    delete<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
         return this.instance.delete(url, config)
     }
 
-    request<T = any>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+    request<T = unknown>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
         return this.instance.request(config)
     }
 }

@@ -21,8 +21,8 @@
           <el-button @click="testGetResources" :loading="loading" style="margin-left: 10px">
             测试获取资源
           </el-button>
-          <el-button @click="clearToken" style="margin-left: 10px">
-            清除 Token
+          <el-button @click="clearSession" style="margin-left: 10px">
+            清除登录
           </el-button>
         </el-form-item>
       </el-form>
@@ -36,11 +36,11 @@
           </el-tag>
         </el-form-item>
 
-        <el-form-item label="Token">
+        <el-form-item label="登录状态(详情)">
           <el-input
-            v-model="token"
+            :value="isLoggedIn ? '已登录 (httpOnly cookie)' : '未登录'"
             type="textarea"
-            :rows="3"
+            :rows="1"
             readonly
             placeholder="未登录"
           />
@@ -67,7 +67,7 @@ import { authApi } from '@/api/auth'
 import { resourceApi } from '@/api/resources'
 
 const loading = ref(false)
-const token = ref<string | null>(localStorage.getItem('token'))
+const loggedIn = ref(!!localStorage.getItem('logged_in'))
 const testResult = ref('')
 
 const baseURL = computed(() => {
@@ -76,7 +76,7 @@ const baseURL = computed(() => {
 
 const hostname = computed(() => window.location.hostname)
 
-const isLoggedIn = computed(() => !!token.value)
+const isLoggedIn = computed(() => loggedIn.value)
 
 const appendResult = (message: string) => {
   const timestamp = new Date().toISOString()
@@ -94,9 +94,8 @@ const testLogin = async () => {
       password: 'admin123'
     })
 
-    token.value = response.data.access_token
-    localStorage.setItem('token', response.data.access_token)
-
+    loggedIn.value = true
+    localStorage.setItem('logged_in', '1')
     appendResult('✅ 登录成功！')
     appendResult(`Token: ${response.data.access_token.substring(0, 50)}...`)
 
@@ -136,18 +135,20 @@ const testGetResources = async () => {
   }
 }
 
-const clearToken = () => {
-  token.value = null
-  localStorage.removeItem('token')
-  appendResult('已清除 Token')
-  ElMessage.info('Token 已清除')
+const clearSession = async () => {
+  loggedIn.value = false
+  localStorage.removeItem('logged_in')
+  // Call logout API to clear httpOnly cookie server-side
+  try { await authApi.logout() } catch { /* ignore */ }
+  appendResult('已清除登录状态')
+  ElMessage.info('登录状态已清除')
 }
 
 onMounted(() => {
   appendResult('页面加载完成')
   appendResult(`当前主机名: ${hostname.value}`)
   appendResult(`Base URL: ${baseURL.value}`)
-  appendResult(`Token 状态: ${isLoggedIn.value ? '已登录' : '未登录'}`)
+  appendResult(`登录状态: ${isLoggedIn.value ? '已登录' : '未登录'}`)
 })
 </script>
 

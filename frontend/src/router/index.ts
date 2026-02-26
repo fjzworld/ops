@@ -98,8 +98,20 @@ const routes: RouteRecordRaw[] = [
                 name: 'Logs',
                 component: () => import('@/views/Logs/LogCenter.vue'),
                 meta: { title: '日志中心', roles: ['admin', 'operator', 'user', 'readonly'] }
+            },
+            {
+                path: 'monitoring',
+                name: 'Monitoring',
+                component: () => import('@/views/Monitoring/MonitoringDashboard.vue'),
+                meta: { roles: ['admin', 'operator', 'user', 'readonly'] }
             }
         ]
+    },
+    {
+        path: '/:catchAll(.*)*',
+        name: 'NotFound',
+        component: () => import('@/views/Login.vue'),
+        meta: { requiresAuth: false, roles: [] }
     }
 ]
 
@@ -117,30 +129,30 @@ function hasPermission(userRole: UserRole | undefined, allowedRoles: UserRole[])
 
 // Navigation guard with role-based access control
 router.beforeEach(async (to, _from, next) => {
-    const token = localStorage.getItem('token')
+    const loggedIn = localStorage.getItem('logged_in')
     const authStore = useAuthStore()
 
-    // 如果需要认证但没有token，跳转到登录页
-    if (to.meta.requiresAuth && !token) {
+    // 如果需要认证但没有登录标记，跳转到登录页
+    if (to.meta.requiresAuth && !loggedIn) {
         next('/login')
         return
     }
 
     // 如果已登录且访问登录页，跳转到dashboard
-    if (to.path === '/login' && token) {
+    if (to.path === '/login' && loggedIn) {
         next('/dashboard')
         return
     }
 
     // 如果需要认证，检查用户角色权限
-    if (to.meta.requiresAuth && token) {
+    if (to.meta.requiresAuth && loggedIn) {
         // 如果用户未加载，先获取用户信息
         if (!authStore.user) {
             try {
                 await authStore.fetchCurrentUser()
             } catch (error) {
-                // 获取用户信息失败，可能是token过期
-                authStore.logout()
+                // 获取用户信息失败，可能是cookie过期
+                await authStore.logout()
                 next('/login')
                 return
             }
