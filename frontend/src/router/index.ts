@@ -100,6 +100,12 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: '日志中心', roles: ['admin', 'operator', 'user', 'readonly'] }
             },
             {
+                path: 'deploy',
+                name: 'Deploy',
+                component: () => import('@/views/Deploy/FrontendDeploy.vue'),
+                meta: { roles: ['admin'] }
+            },
+            {
                 path: 'monitoring',
                 name: 'Monitoring',
                 component: () => import('@/views/Monitoring/MonitoringDashboard.vue'),
