@@ -1,149 +1,139 @@
 <template>
-  <div class="deploy-page page-container">
-    <div class="glass-panel">
-      <!-- Header -->
-      <div class="panel-header">
-        <div class="header-left">
-          <h2 class="panel-title">前端代码部署</h2>
-          <span class="panel-subtitle">上传前端构建包，一键部署到目标服务器</span>
-        </div>
+  <div class="deploy-panel">
+    <!-- Step 1: Upload -->
+    <div class="section">
+      <div class="section-title">
+        <span class="step-badge">1</span>
+        上传构建包
       </div>
-
-      <!-- Step 1: Upload -->
-      <div class="section">
-        <div class="section-title">
-          <span class="step-badge">1</span>
-          上传构建包
-        </div>
-        <div class="upload-area">
-          <el-upload
-            ref="uploadRef"
-            drag
-            :auto-upload="false"
-            :limit="1"
-            :on-change="handleFileChange"
-            :on-exceed="handleExceed"
-            :before-upload="() => false"
-            accept=".zip,.tar.gz,.tgz"
-            class="dist-upload"
-          >
-            <div class="upload-content">
-              <el-icon class="upload-icon"><UploadFilled /></el-icon>
-              <div class="upload-text">将 dist 压缩包拖到此处，或 <em>点击选择</em></div>
-              <div class="upload-hint">支持 .zip / .tar.gz，最大 100MB</div>
-            </div>
-          </el-upload>
-          <div class="upload-actions" v-if="selectedFile">
-            <div class="file-info">
-              <el-icon><Document /></el-icon>
-              <span class="file-name">{{ selectedFile.name }}</span>
-              <span class="file-size">({{ formatFileSize(selectedFile.size) }})</span>
-            </div>
-            <el-button
-              type="primary"
-              :loading="uploading"
-              @click="handleUpload"
-              class="glass-button"
-            >
-              <el-icon><Upload /></el-icon>
-              上传并验证
-            </el-button>
+      <div class="upload-area">
+        <el-upload
+          ref="uploadRef"
+          drag
+          :auto-upload="false"
+          :limit="1"
+          :on-change="handleFileChange"
+          :on-exceed="handleExceed"
+          :before-upload="() => false"
+          accept=".zip,.tar.gz,.tgz"
+          class="dist-upload"
+        >
+          <div class="upload-content">
+            <el-icon class="upload-icon"><UploadFilled /></el-icon>
+            <div class="upload-text">将 dist 压缩包拖到此处，或 <em>点击选择</em></div>
+            <div class="upload-hint">支持 .zip / .tar.gz，最大 100MB</div>
           </div>
-          <div class="upload-result" v-if="uploadResult">
-            <el-alert
-              :title="uploadResult.message"
-              :type="uploadResult.valid ? 'success' : 'error'"
-              show-icon
-              :closable="false"
-            />
+        </el-upload>
+        <div class="upload-actions" v-if="selectedFile">
+          <div class="file-info">
+            <el-icon><Document /></el-icon>
+            <span class="file-name">{{ selectedFile.name }}</span>
+            <span class="file-size">({{ formatFileSize(selectedFile.size) }})</span>
           </div>
-        </div>
-      </div>
-
-      <!-- Step 2: Server Selection -->
-      <div class="section" :class="{ 'section-disabled': !uploadResult?.valid }">
-        <div class="section-title">
-          <span class="step-badge">2</span>
-          选择目标服务器
-          <span class="section-hint">（最多选择 2 台）</span>
-        </div>
-        <div class="server-list" v-loading="loadingResources">
-          <div
-            v-for="r in resources"
-            :key="r.id"
-            class="server-card"
-            :class="{ selected: selectedResourceIds.includes(r.id) }"
-            @click="toggleServer(r.id)"
-          >
-            <div class="server-check">
-              <el-icon v-if="selectedResourceIds.includes(r.id)" class="check-icon"><Select /></el-icon>
-            </div>
-            <div class="server-info">
-              <span class="server-name">{{ r.name }}</span>
-              <span class="server-ip">{{ r.ip_address }}</span>
-            </div>
-          </div>
-          <div v-if="!loadingResources && resources.length === 0" class="empty-hint">
-            暂无可用资源，请先在资源管理中添加服务器
-          </div>
-        </div>
-        <div class="keepalived-option" v-if="selectedResourceIds.length === 2">
-          <el-checkbox v-model="restartKeepalived">
-            同时重启 keepalived（双机高可用模式）
-          </el-checkbox>
-        </div>
-      </div>
-
-      <!-- Step 3: Deploy -->
-      <div class="section" :class="{ 'section-disabled': !canDeploy }">
-        <div class="section-title">
-          <span class="step-badge">3</span>
-          执行部署
-        </div>
-        <div class="deploy-actions">
           <el-button
-            type="success"
-            size="large"
-            :loading="deploying"
-            :disabled="!canDeploy"
-            @click="handleDeploy"
-            class="glow-button deploy-btn"
-          >
-            <el-icon><Promotion /></el-icon>
-            {{ deploying ? '部署中...' : '开始部署' }}
-          </el-button>
-          <el-button
-            type="warning"
-            size="large"
-            :disabled="deploying"
-            @click="showRollbackDialog = true"
+            type="primary"
+            :loading="uploading"
+            @click="handleUpload"
             class="glass-button"
           >
-            <el-icon><RefreshLeft /></el-icon>
-            回滚
+            <el-icon><Upload /></el-icon>
+            上传并验证
           </el-button>
         </div>
+        <div class="upload-result" v-if="uploadResult">
+          <el-alert
+            :title="uploadResult.message"
+            :type="uploadResult.valid ? 'success' : 'error'"
+            show-icon
+            :closable="false"
+          />
+        </div>
+      </div>
+    </div>
 
-        <!-- Deploy Log -->
-        <div class="deploy-log" v-if="deployResults.length > 0">
-          <div class="log-header">部署日志</div>
-          <div class="log-body">
-            <div v-for="(result, ri) in deployResults" :key="ri" class="log-server-block">
-              <div class="log-server-title">
-                <span class="server-badge" :class="result.success ? 'badge-success' : 'badge-fail'">
-                  {{ result.success ? '✅' : '❌' }}
-                </span>
-                {{ result.server }} (ID: {{ result.resource_id }})
-              </div>
-              <div v-for="(step, si) in result.steps" :key="si" class="log-step">
-                <span class="step-icon">
-                  {{ step.status === 'success' ? '✅' : step.status === 'failed' ? '❌' : '⏳' }}
-                </span>
-                <span class="step-name">{{ step.step }}</span>
-                <span class="step-msg" v-if="step.message">— {{ step.message }}</span>
-              </div>
-              <div v-if="result.error" class="log-error">{{ result.error }}</div>
+    <!-- Step 2: Server Selection -->
+    <div class="section" :class="{ 'section-disabled': !uploadResult?.valid }">
+      <div class="section-title">
+        <span class="step-badge">2</span>
+        选择目标服务器
+        <span class="section-hint">（最多选择 2 台）</span>
+      </div>
+      <div class="server-list" v-loading="loadingResources">
+        <div
+          v-for="r in resources"
+          :key="r.id"
+          class="server-card"
+          :class="{ selected: selectedResourceIds.includes(r.id) }"
+          @click="toggleServer(r.id)"
+        >
+          <div class="server-check">
+            <el-icon v-if="selectedResourceIds.includes(r.id)" class="check-icon"><Select /></el-icon>
+          </div>
+          <div class="server-info">
+            <span class="server-name">{{ r.name }}</span>
+            <span class="server-ip">{{ r.ip_address }}</span>
+          </div>
+        </div>
+        <div v-if="!loadingResources && resources.length === 0" class="empty-hint">
+          暂无可用资源，请先在资源管理中添加服务器
+        </div>
+      </div>
+      <div class="keepalived-option" v-if="selectedResourceIds.length === 2">
+        <el-checkbox v-model="restartKeepalived">
+          同时重启 keepalived（双机高可用模式）
+        </el-checkbox>
+      </div>
+    </div>
+
+    <!-- Step 3: Deploy -->
+    <div class="section" :class="{ 'section-disabled': !canDeploy }">
+      <div class="section-title">
+        <span class="step-badge">3</span>
+        执行部署
+      </div>
+      <div class="deploy-actions">
+        <el-button
+          type="success"
+          size="large"
+          :loading="deploying"
+          :disabled="!canDeploy"
+          @click="handleDeploy"
+          class="glow-button deploy-btn"
+        >
+          <el-icon><Promotion /></el-icon>
+          {{ deploying ? '部署中...' : '开始部署' }}
+        </el-button>
+        <el-button
+          type="warning"
+          size="large"
+          :disabled="deploying"
+          @click="showRollbackDialog = true"
+          class="glass-button"
+        >
+          <el-icon><RefreshLeft /></el-icon>
+          回滚
+        </el-button>
+      </div>
+
+      <!-- Deploy Log -->
+      <div class="deploy-log" v-if="deployResults.length > 0">
+        <div class="log-header">部署日志</div>
+        <div class="log-body">
+          <div v-for="(result, ri) in deployResults" :key="ri" class="log-server-block">
+            <div class="log-server-title">
+              <span class="server-badge" :class="result.success ? 'badge-success' : 'badge-fail'">
+                {{ result.success ? '✅' : '❌' }}
+              </span>
+              {{ result.server }} (ID: {{ result.resource_id }})
             </div>
+            <div v-for="(step, si) in result.steps" :key="si" class="log-step">
+              <span class="step-icon">
+                {{ step.status === 'success' ? '✅' : step.status === 'failed' ? '❌' : '⏳' }}
+              </span>
+              <span class="step-name">{{ step.step }}</span>
+              <span class="step-msg" v-if="step.message">— {{ step.message }}</span>
+            </div>
+            <div v-if="result.error" class="log-error">{{ result.error }}</div>
           </div>
         </div>
       </div>
@@ -223,7 +213,7 @@ import type { UploadInstance, UploadFile, UploadRawFile } from 'element-plus'
 import {
   UploadFilled, Upload, Document, Select, Promotion, RefreshLeft
 } from '@element-plus/icons-vue'
-import { deployApi, type UploadResponse, type DeployResult, type BackupInfo } from '@/api/deploy'
+import { operationsApi, type UploadResponse, type DeployResult, type BackupInfo } from '@/api/operations'
 import { resourceApi } from '@/api/resources'
 
 interface SimpleResource {
@@ -283,7 +273,7 @@ const handleUpload = async () => {
   if (!selectedFile.value) return
   uploading.value = true
   try {
-    const { data } = await deployApi.uploadDist(selectedFile.value)
+    const { data } = await operationsApi.uploadDist(selectedFile.value)
     uploadResult.value = data
     if (data.valid) {
       fileId.value = data.file_id
@@ -334,7 +324,7 @@ const handleDeploy = async () => {
   deploying.value = true
   deployResults.value = []
   try {
-    const { data } = await deployApi.execute({
+    const { data } = await operationsApi.executeDeploy({
       file_id: fileId.value,
       resource_ids: selectedResourceIds.value,
       restart_keepalived: restartKeepalived.value
@@ -364,7 +354,7 @@ const loadBackups = async (resourceId: number) => {
   loadingBackups.value = true
   rollbackBackupName.value = ''
   try {
-    const { data } = await deployApi.getBackups(resourceId)
+    const { data } = await operationsApi.getBackups(resourceId)
     backups.value = data
   } catch {
     ElMessage.error('获取备份列表失败')
@@ -388,7 +378,7 @@ const handleRollback = async () => {
 
   rollingBack.value = true
   try {
-    const { data } = await deployApi.rollback({
+    const { data } = await operationsApi.rollback({
       resource_id: rollbackResourceId.value,
       backup_name: rollbackBackupName.value
     })
@@ -430,51 +420,9 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page-container {
-  padding: 0;
-  height: 100%;
-}
-
-.deploy-page {
+.deploy-panel {
   display: flex;
   flex-direction: column;
-}
-
-.glass-panel {
-  flex: 1;
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  padding: 24px;
-}
-
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
-
-.header-left {
-  display: flex;
-  flex-direction: column;
-}
-
-.panel-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  color: #F8FAFC;
-  letter-spacing: -0.5px;
-}
-
-.panel-subtitle {
-  font-size: 13px;
-  color: #94A3B8;
-  margin-top: 4px;
 }
 
 /* Sections */

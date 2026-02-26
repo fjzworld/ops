@@ -82,16 +82,16 @@ const routes: RouteRecordRaw[] = [
                 meta: { roles: ['admin', 'operator'] } // 仅管理员和操作员可访问
             },
             {
-                path: 'automation',
-                name: 'Automation',
-                component: () => import('@/views/Automation/TaskList.vue'),
-                meta: { roles: ['admin', 'operator', 'user', 'readonly'] }
+                path: 'operations',
+                name: 'Operations',
+                component: () => import('@/views/Operations/OperationCenter.vue'),
+                meta: { roles: ['admin', 'operator'] }
             },
             {
-                path: 'automation/tasks/:id/history',
-                name: 'AutomationHistory',
-                component: () => import('@/views/Automation/TaskHistory.vue'), // Although not requested in Task 4 description, TaskList refers to it
-                meta: { roles: ['admin', 'operator', 'user', 'readonly'] }
+                path: 'operations/:id/history',
+                name: 'OperationHistory',
+                component: () => import('@/views/Operations/OperationHistory.vue'),
+                meta: { roles: ['admin', 'operator'] }
             },
             {
                 path: 'logs',
@@ -99,12 +99,7 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/Logs/LogCenter.vue'),
                 meta: { title: '日志中心', roles: ['admin', 'operator', 'user', 'readonly'] }
             },
-            {
-                path: 'deploy',
-                name: 'Deploy',
-                component: () => import('@/views/Deploy/FrontendDeploy.vue'),
-                meta: { roles: ['admin'] }
-            },
+            // deploy route removed — merged into /operations
             {
                 path: 'monitoring',
                 name: 'Monitoring',

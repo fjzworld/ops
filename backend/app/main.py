@@ -11,9 +11,9 @@ from app.core.config import settings
 from app.core.database import engine, Base, AsyncSessionLocal, async_engine
 from app.core.exceptions import AppException
 from app.core.rate_limit import limiter
-from app.api.v1 import auth, users, resources, monitoring, alerts, automation, containers, middlewares, logs, deploy
+from app.api.v1 import auth, users, resources, monitoring, alerts, containers, middlewares, logs, operations
 from app.services.scheduler import SchedulerService
-from app.models.task import Task
+from app.models.operation import Operation, OperationType
 
 import logging
 
@@ -31,16 +31,18 @@ async def lifespan(app: FastAPI):
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Sync tasks to RedBeat on startup
+    # Sync script_exec operations to RedBeat on startup
     async with AsyncSessionLocal() as db:
         try:
-            result = await db.execute(select(Task))
-            tasks = result.scalars().all()
-            for task in tasks:
-                SchedulerService.sync_task(task)
-            logger.info(f"Synced {len(tasks)} tasks to scheduler")
+            result = await db.execute(
+                select(Operation).filter(Operation.operation_type == OperationType.SCRIPT_EXEC)
+            )
+            ops = result.scalars().all()
+            for op in ops:
+                SchedulerService.sync_task(op)
+            logger.info(f"Synced {len(ops)} operations to scheduler")
         except Exception as e:
-            logger.error(f"Error syncing tasks on startup: {e}")
+            logger.error(f"Error syncing operations on startup: {e}")
     
     yield
 
@@ -77,10 +79,9 @@ app.include_router(containers.router, prefix="/api/v1/resources", tags=["Contain
 app.include_router(resources.router, prefix="/api/v1/resources", tags=["Resources"])
 app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["Monitoring"])
 app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["Alerts"])
-app.include_router(automation.router, prefix="/api/v1/automation", tags=["Automation"])
+app.include_router(operations.router, prefix="/api/v1/operations", tags=["Operations"])
 app.include_router(middlewares.router, prefix="/api/v1/middlewares", tags=["Middlewares"])
 app.include_router(logs.router, prefix="/api/v1/logs", tags=["Logs"])
-app.include_router(deploy.router, prefix="/api/v1/deploy", tags=["Deploy"])
 
 # Prometheus metrics endpoint
 metrics_app = make_asgi_app()

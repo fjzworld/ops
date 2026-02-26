@@ -2,7 +2,7 @@ import logging
 from celery.schedules import crontab
 from redbeat import RedBeatSchedulerEntry
 from app.tasks.celery_app import celery_app
-from app.models.task import Task
+from app.models.operation import Operation
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class SchedulerService:
         return f"task-{task_id}"
 
     @classmethod
-    def sync_task(cls, task: Task):
+    def sync_task(cls, task: Operation):
         """
         Sync task schedule to RedBeat.
         If task is disabled or has invalid schedule, ensure it's removed.

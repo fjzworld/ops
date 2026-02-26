@@ -1,7 +1,7 @@
 from app.tasks.celery_app import celery_app
 from celery import chord, group
 from app.core.database import SessionLocal
-from app.models.task import Task, TaskStatus, TaskExecution
+from app.models.operation import Operation, OperationStatus, OperationExecution, OperationType
 from app.models.resource import Resource
 from app.services.credential_service import CredentialService
 from app.core.ssh import create_secure_client
@@ -18,14 +18,15 @@ CONNECT_TIMEOUT = 15
 EXEC_TIMEOUT = 300
 MAX_OUTPUT_SIZE = 1 * 1024 * 1024  # 1MB
 
-def _create_execution_history(db, task: Task, start_time: datetime):
-    new_execution = TaskExecution(
-        task_id=task.id,
-        status=task.status,
+def _create_execution_history(db, operation: Operation, start_time: datetime):
+    new_execution = OperationExecution(
+        operation_id=operation.id,
+        operation_type=OperationType.SCRIPT_EXEC,
+        status=operation.status,
         start_time=start_time,
         end_time=datetime.now(timezone.utc),
-        output=task.last_output,
-        error=task.last_error
+        output=operation.last_output,
+        error=operation.last_error
     )
     db.add(new_execution)
     return new_execution
@@ -101,7 +102,7 @@ def _execute_ssh_script(resource: Resource, script_content: str) -> dict:
 def execute_single_resource(self, task_id: int, resource_id: int):
     """
     Execute automation script on a single resource.
-    Returns execution result without updating Task status in DB.
+    Returns execution result without updating Operation status in DB.
     """
     script_content = None
     resource = None
@@ -109,10 +110,11 @@ def execute_single_resource(self, task_id: int, resource_id: int):
     
     try:
         with SessionLocal() as db:
-            task = db.query(Task).filter(Task.id == task_id).first()
-            if task:
+            operation = db.query(Operation).filter(Operation.id == task_id).first()
+            if operation:
                 task_found = True
-                script_content = task.script_content
+                config = operation.config or {}
+                script_content = config.get("script_content", "")
             
             resource_obj = db.query(Resource).filter(Resource.id == resource_id).first()
             if resource_obj:
@@ -132,7 +134,7 @@ def execute_single_resource(self, task_id: int, resource_id: int):
         return {
             "resource_id": resource_id,
             "status": "failed",
-            "output": f"Task {task_id} not found",
+            "output": f"Operation {task_id} not found",
             "exit_code": -1
         }
     
@@ -160,15 +162,15 @@ def execute_single_resource(self, task_id: int, resource_id: int):
 @celery_app.task(bind=True)
 def summarize_automation_results(self, results, task_id: int):
     """
-    Aggregate results from parallel execution and update Task status.
+    Aggregate results from parallel execution and update Operation status.
     """
-    logger.info(f"Summarizing results for task {task_id}")
+    logger.info(f"Summarizing results for operation {task_id}")
     try:
         with SessionLocal() as db:
-            task = db.query(Task).filter(Task.id == task_id).first()
-            if not task:
-                logger.error(f"Task {task_id} not found during summarization")
-                return f"Error: Task {task_id} not found"
+            operation = db.query(Operation).filter(Operation.id == task_id).first()
+            if not operation:
+                logger.error(f"Operation {task_id} not found during summarization")
+                return f"Error: Operation {task_id} not found"
 
             success_count = 0
             failure_count = 0
@@ -195,34 +197,34 @@ def summarize_automation_results(self, results, task_id: int):
                 else:
                     failure_count += 1
             
-            task.last_output = "\n".join(overall_output)
+            operation.last_output = "\n".join(overall_output)
             
             if failure_count > 0:
-                task.status = TaskStatus.FAILED
-                task.last_error = f"Execution failed on {failure_count} resources"
+                operation.status = OperationStatus.FAILED
+                operation.last_error = f"Execution failed on {failure_count} resources"
             else:
-                task.status = TaskStatus.SUCCESS
-                task.last_error = None
+                operation.status = OperationStatus.SUCCESS
+                operation.last_error = None
                 
-            task.success_count += success_count
-            task.failure_count += failure_count
+            operation.success_count += success_count
+            operation.failure_count += failure_count
             
-            _create_execution_history(db, task, task.last_run_at)
+            _create_execution_history(db, operation, operation.last_run_at)
             
             db.commit()
-            return f"Task {task_id} summary: {success_count} success, {failure_count} failed"
+            return f"Operation {task_id} summary: {success_count} success, {failure_count} failed"
     except Exception as e:
         logger.error(f"Error in summarize_automation_results: {str(e)}")
-        # Try to update task status if possible
+        # Try to update operation status if possible
         try:
             with SessionLocal() as db:
                 try:
-                    task = db.query(Task).filter(Task.id == task_id).first()
-                    if task:
-                        task.status = TaskStatus.FAILED
-                        task.last_error = f"Summarization error: {str(e)}"
+                    operation = db.query(Operation).filter(Operation.id == task_id).first()
+                    if operation:
+                        operation.status = OperationStatus.FAILED
+                        operation.last_error = f"Summarization error: {str(e)}"
                         
-                        _create_execution_history(db, task, task.last_run_at)
+                        _create_execution_history(db, operation, operation.last_run_at)
                         db.commit()
                 except Exception:
                     db.rollback()
@@ -235,35 +237,35 @@ def run_automation_task(self, task_id: int):
     """
     Dispatcher task: Spawns parallel executions for each target resource.
     """
-    logger.info(f"Dispatching task {task_id}")
+    logger.info(f"Dispatching operation {task_id}")
     try:
         with SessionLocal() as db:
-            task = db.query(Task).filter(Task.id == task_id).first()
-            if not task:
-                logger.error(f"Task {task_id} not found")
-                return f"Error: Task {task_id} not found"
+            operation = db.query(Operation).filter(Operation.id == task_id).first()
+            if not operation:
+                logger.error(f"Operation {task_id} not found")
+                return f"Error: Operation {task_id} not found"
                 
             # Update status to RUNNING
-            task.status = TaskStatus.RUNNING
-            task.last_run_at = datetime.now(timezone.utc)
-            task.execution_count += 1
+            operation.status = OperationStatus.RUNNING
+            operation.last_run_at = datetime.now(timezone.utc)
+            operation.execution_count += 1
             db.commit()
             
-            target_resource_ids = task.target_resources or []
+            target_resource_ids = operation.target_resources or []
             
             if not target_resource_ids:
-                logger.warning(f"Task {task_id} has no target resources")
-                task.status = TaskStatus.FAILED
-                task.last_output = "No target resources specified."
-                task.last_error = "No target resources"
-                task.failure_count += 1
+                logger.warning(f"Operation {task_id} has no target resources")
+                operation.status = OperationStatus.FAILED
+                operation.last_output = "No target resources specified."
+                operation.last_error = "No target resources"
+                operation.failure_count += 1
                 
-                _create_execution_history(db, task, task.last_run_at)
+                _create_execution_history(db, operation, operation.last_run_at)
                 
                 db.commit()
                 return "No target resources"
 
-            logger.info(f"Task {task_id} targeting resources: {target_resource_ids}")
+            logger.info(f"Operation {task_id} targeting resources: {target_resource_ids}")
 
             # Create chord
             # header: group of tasks to execute in parallel
@@ -275,18 +277,18 @@ def run_automation_task(self, task_id: int):
             # Execute the chord
             chord(header)(callback)
             
-            return f"Dispatched {len(target_resource_ids)} tasks for Task {task_id}"
+            return f"Dispatched {len(target_resource_ids)} tasks for Operation {task_id}"
             
     except Exception as e:
-        logger.error(f"Error dispatching task {task_id}: {str(e)}")
+        logger.error(f"Error dispatching operation {task_id}: {str(e)}")
         try:
             with SessionLocal() as db:
                 try:
-                    task = db.query(Task).filter(Task.id == task_id).first()
-                    if task:
-                        task.status = TaskStatus.FAILED
-                        task.last_error = f"Dispatch error: {str(e)}"
-                        _create_execution_history(db, task, task.last_run_at or datetime.now(timezone.utc))
+                    operation = db.query(Operation).filter(Operation.id == task_id).first()
+                    if operation:
+                        operation.status = OperationStatus.FAILED
+                        operation.last_error = f"Dispatch error: {str(e)}"
+                        _create_execution_history(db, operation, operation.last_run_at or datetime.now(timezone.utc))
                         db.commit()
                 except Exception:
                     db.rollback()

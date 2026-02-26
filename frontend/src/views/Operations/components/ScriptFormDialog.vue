@@ -2,58 +2,58 @@
   <el-dialog
     :model-value="modelValue"
     @update:model-value="$emit('update:modelValue', $event)"
-    :title="task ? '编辑任务' : '新建任务'"
+    :title="operation ? '编辑脚本任务' : '新建脚本任务'"
     width="70%"
     class="glass-dialog"
     :close-on-click-modal="false"
   >
-    <el-form 
+    <el-form
       ref="formRef"
-      :model="form" 
+      :model="form"
       :rules="rules"
-      label-width="100px" 
-      class="glass-form" 
+      label-width="100px"
+      class="glass-form"
       style="margin-top: 10px"
     >
       <el-form-item label="任务名称" prop="name">
         <el-input v-model="form.name" placeholder="输入任务名称" />
       </el-form-item>
-      
-      <el-form-item label="任务类型" prop="type">
-        <el-select v-model="form.type" placeholder="选择任务类型" style="width: 100%">
+
+      <el-form-item label="脚本类型" prop="taskType">
+        <el-select v-model="form.taskType" placeholder="选择脚本类型" style="width: 100%">
           <el-option label="Shell脚本" value="shell" />
           <el-option label="Python脚本" value="python" />
           <el-option label="Ansible Playbook" value="ansible" />
           <el-option label="HTTP API" value="http" />
         </el-select>
       </el-form-item>
-      
+
       <el-form-item label="任务描述" prop="description">
         <el-input v-model="form.description" type="textarea" :rows="2" placeholder="简要说明任务用途" />
       </el-form-item>
 
-      <el-form-item :label="form.type === 'http' ? '配置参数' : '脚本内容'" prop="content">
+      <el-form-item :label="form.taskType === 'http' ? '配置参数' : '脚本内容'" prop="scriptContent">
         <div class="code-editor-wrapper">
           <div class="editor-header">
-            <span class="lang-tag">{{ form.type.toUpperCase() }}</span>
+            <span class="lang-tag">{{ form.taskType.toUpperCase() }}</span>
           </div>
           <vue-monaco-editor
-            v-model:value="form.content"
+            v-model:value="form.scriptContent"
             :language="editorLanguage"
             theme="vs-dark"
-            :height="form.type === 'http' ? '200px' : '300px'"
+            :height="form.taskType === 'http' ? '200px' : '300px'"
             :options="editorOptions"
           />
         </div>
       </el-form-item>
 
-      <el-form-item label="定时计划" prop="cron_expression">
-        <el-input v-model="form.cron_expression" placeholder="例如: 0 0 * * * (每天零点)" />
+      <el-form-item label="定时计划" prop="schedule">
+        <el-input v-model="form.schedule" placeholder="例如: 0 0 * * * (每天零点)" />
         <span class="resource-desc">Cron表达式，留空则仅支持手动执行</span>
       </el-form-item>
 
       <el-form-item label="启用状态">
-        <el-switch v-model="form.is_active" />
+        <el-switch v-model="form.enabled" />
       </el-form-item>
     </el-form>
 
@@ -61,7 +61,7 @@
       <div class="dialog-actions">
         <el-button @click="$emit('update:modelValue', false)" class="glass-button">取消</el-button>
         <el-button type="primary" @click="handleSave" :loading="loading" class="glow-button">
-          {{ task ? '保存修改' : '立即创建' }}
+          {{ operation ? '保存修改' : '立即创建' }}
         </el-button>
       </div>
     </template>
@@ -73,11 +73,13 @@ import { ref, watch, reactive, computed, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
-import { automationApi } from '@/api/automation'
+import { operationsApi } from '@/api/operations'
+import type { Operation } from '@/types/operation'
+import { OperationType } from '@/types/operation'
 
 const props = defineProps<{
   modelValue: boolean
-  task?: any
+  operation?: Operation | null
 }>()
 
 const emit = defineEmits(['update:modelValue', 'saved'])
@@ -99,16 +101,16 @@ const editorLanguage = computed(() => {
     'ansible': 'yaml',
     'http': 'json'
   }
-  return map[form.type] || 'shell'
+  return map[form.taskType] || 'shell'
 })
 
 const form = reactive({
   name: '',
-  type: 'shell',
+  taskType: 'shell',
   description: '',
-  content: '',
-  cron_expression: '',
-  is_active: true
+  scriptContent: '',
+  schedule: '',
+  enabled: true
 })
 
 const rules = reactive<FormRules>({
@@ -116,33 +118,33 @@ const rules = reactive<FormRules>({
     { required: true, message: '请输入任务名称', trigger: 'blur' },
     { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
   ],
-  type: [
-    { required: true, message: '请选择任务类型', trigger: 'change' }
+  taskType: [
+    { required: true, message: '请选择脚本类型', trigger: 'change' }
   ],
-  content: [
-    { required: true, message: '请输入任务内容', trigger: 'blur' }
+  scriptContent: [
+    { required: true, message: '请输入脚本内容', trigger: 'blur' }
   ]
 })
 
 watch(() => props.modelValue, (val) => {
   if (val) {
-    if (props.task) {
+    if (props.operation) {
       Object.assign(form, {
-        name: props.task.name,
-        type: props.task.type,
-        description: props.task.description,
-        content: props.task.content,
-        cron_expression: props.task.cron_expression,
-        is_active: props.task.is_active
+        name: props.operation.name,
+        taskType: props.operation.config?.task_type || 'shell',
+        description: props.operation.description || '',
+        scriptContent: props.operation.config?.script_content || '',
+        schedule: props.operation.schedule || '',
+        enabled: props.operation.enabled
       })
     } else {
       Object.assign(form, {
         name: '',
-        type: 'shell',
+        taskType: 'shell',
         description: '',
-        content: '',
-        cron_expression: '',
-        is_active: true
+        scriptContent: '',
+        schedule: '',
+        enabled: true
       })
     }
     // Clear validation
@@ -154,16 +156,28 @@ watch(() => props.modelValue, (val) => {
 
 const handleSave = async () => {
   if (!formRef.value) return
-  
+
   await formRef.value.validate(async (valid) => {
     if (valid) {
       loading.value = true
       try {
-        if (props.task) {
-          await automationApi.update(props.task.id, form)
+        const payload = {
+          name: form.name,
+          description: form.description,
+          operation_type: OperationType.SCRIPT_EXEC,
+          config: {
+            task_type: form.taskType,
+            script_content: form.scriptContent,
+          },
+          schedule: form.schedule || undefined,
+          enabled: form.enabled,
+        }
+
+        if (props.operation) {
+          await operationsApi.update(props.operation.id, payload)
           ElMessage.success('任务更新成功')
         } else {
-          await automationApi.create(form)
+          await operationsApi.create(payload)
           ElMessage.success('任务创建成功')
         }
         emit('saved')

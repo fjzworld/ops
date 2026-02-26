@@ -18,7 +18,7 @@ from app.schemas.resource import (
     ResourceProbeRequest, ResourceProbeResponse,
     ResourceDeleteRequest, ResourceStats, MessageResponse, MetricResponse
 )
-from app.schemas.task import TaskExecutionMessage
+from pydantic import BaseModel
 from app.api.v1.auth import get_current_active_user
 from app.services.resource_detector import probe_server, SSHCredentials
 from app.services.alloy_deployer import deploy_alloy_agent
@@ -35,6 +35,12 @@ from app.core.prometheus import PrometheusClient
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class TaskExecutionMessage(BaseModel):
+    """Schema for task execution response"""
+    message: str
+    task_id: int
 
 
 @router.get("/", response_model=List[ResourceInDB])
