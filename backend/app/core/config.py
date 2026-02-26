@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
+    # Cookie security - set to True ONLY when serving over HTTPS
+    # Default False because most deployments start without HTTPS
+    COOKIE_SECURE: bool = False
+    
     # Encryption key for sensitive data (SSH credentials, etc.)
     ENCRYPTION_KEY: Optional[str] = Field(
         default=None,
