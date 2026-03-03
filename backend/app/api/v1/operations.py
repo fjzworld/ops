@@ -27,7 +27,7 @@ from app.core.exceptions import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100MB
+MAX_UPLOAD_SIZE = 200 * 1024 * 1024  # 200MB
 
 
 # ========== Generic Operation CRUD ==========
