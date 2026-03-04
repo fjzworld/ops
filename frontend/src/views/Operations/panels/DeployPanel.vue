@@ -64,7 +64,8 @@
       <div class="section-title">
         <span class="step-badge">2</span>
         选择目标服务器
-        <span class="section-hint">（最多选择 2 台）</span>
+        <span class="section-hint" v-if="deployType === 'frontend'">（前端部署最多选择 2 台）</span>
+        <span class="section-hint" v-else>（可选择多台服务器）</span>
       </div>
       <div class="server-list" v-loading="loadingResources">
         <div

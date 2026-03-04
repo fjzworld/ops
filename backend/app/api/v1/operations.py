@@ -282,6 +282,8 @@ async def execute_deploy(
     """Execute frontend deployment — creates Operation record with execution history"""
     if current_user.role != "admin":
         raise PermissionDeniedException(message="Only admin can deploy")
+    if request.deploy_type == "frontend" and len(request.resource_ids) > 2:
+        raise BadRequestException(message="Frontend deployment supports maximum 2 servers")
 
     file_path = DeployService.get_upload_path(request.file_id)
     if not file_path:
