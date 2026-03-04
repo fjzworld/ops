@@ -46,8 +46,8 @@ class DeployService:
         return file_id, str(save_path)
 
     @staticmethod
-    def validate_package(file_path: str) -> Tuple[bool, str]:
-        """Validate that the package contains index.html"""
+    def validate_package(file_path: str, deploy_type: str = "frontend") -> Tuple[bool, str]:
+        """Validate that the package contains expected files based on deploy_type"""
         try:
             if file_path.endswith('.zip'):
                 with zipfile.ZipFile(file_path, 'r') as zf:
@@ -58,9 +58,12 @@ class DeployService:
             else:
                 return False, "Unsupported file format"
 
-            has_index = any(n.endswith('index.html') for n in names)
-            if not has_index:
-                return False, "Package does not contain index.html"
+            if deploy_type == "frontend":
+                has_index = any(n.endswith('index.html') for n in names)
+                if not has_index:
+                    return False, "Frontend package does not contain index.html"
+            
+            # For backend and algorithm, we just accept the archive as is
             return True, "Package is valid"
         except Exception as e:
             return False, f"Failed to validate package: {str(e)}"
@@ -86,11 +89,13 @@ class DeployService:
     async def deploy_to_servers(
         file_path: str,
         resources: List[Resource],
-        restart_keepalived: bool = False
+        deploy_type: str = "frontend",
+        restart_keepalived: bool = False,
+        restart_container: bool = True
     ) -> List[DeployResult]:
-        """Deploy frontend code to multiple servers in parallel"""
+        """Deploy code to multiple servers in parallel"""
         tasks = [
-            DeployService._deploy_single(file_path, resource, restart_keepalived)
+            DeployService._deploy_single(file_path, resource, deploy_type, restart_keepalived, restart_container)
             for resource in resources
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -113,7 +118,9 @@ class DeployService:
     async def _deploy_single(
         file_path: str,
         resource: Resource,
-        restart_keepalived: bool
+        deploy_type: str,
+        restart_keepalived: bool,
+        restart_container: bool
     ) -> DeployResult:
         """Deploy to a single server via SSH"""
         server_name = resource.ip_address or resource.name
@@ -158,24 +165,21 @@ class DeployService:
                 return out
 
             # 1. Create backup directory
-            execute(f"mkdir -p {NGINX_BACKUP_DIR}")
+            execute(f"mkdir -p {backup_dir}")
 
             # 2. Backup current code
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_name = f"html_{timestamp}.tar.gz"
+            backup_name = f"{backup_prefix}_{timestamp}.tar.gz"
             try:
-                execute(f"tar -czf {NGINX_BACKUP_DIR}/{backup_name} -C {NGINX_BASE_DIR} html/")
+                execute(f"tar -czf {backup_dir}/{backup_name} -C {target_parent} {target_folder}/")
                 step_log("备份当前代码", "success", backup_name)
             except Exception as e:
                 step_log("备份当前代码", "failed", str(e))
-                return DeployResult(
-                    server=server_name, resource_id=resource.id,
-                    success=False, steps=steps, error="Backup failed, deployment aborted"
-                )
+                # Allow continuing if the target directory doesn't exist yet (first deploy)
 
             # 3. Clean old backups (older than 3 days)
             try:
-                execute(f"find {NGINX_BACKUP_DIR} -name 'html_*.tar.gz' -mtime +3 -delete")
+                execute(f"find {backup_dir} -name '{backup_prefix}_*.tar.gz' -mtime +3 -delete")
                 step_log("清理旧备份", "success")
             except Exception:
                 step_log("清理旧备份", "success", "No old backups to clean")
@@ -193,9 +197,10 @@ class DeployService:
                     success=False, steps=steps, error="Upload failed"
                 )
 
-            # 5. Clear html and extract
+            # 5. Clear target dir and extract
             try:
-                execute(f"rm -rf {NGINX_HTML_DIR}/*")
+                execute(f"mkdir -p {target_dir}")
+                execute(f"rm -rf {target_dir}/*")
                 extract_id = uuid.uuid4().hex[:8]
                 extract_dir = f"/tmp/deploy_extract_{extract_id}"
 
@@ -205,25 +210,36 @@ class DeployService:
                     execute(f"mkdir -p {extract_dir}")
                     execute(f"tar -xzf {remote_tmp}.pkg -C {extract_dir}")
 
-                # Check if index.html is at root or in a subdirectory
-                check = execute(
-                    f"if [ -f {extract_dir}/index.html ]; then echo 'root'; "
-                    f"else ls -d {extract_dir}/*/index.html 2>/dev/null | head -1; fi"
-                )
-                if check == 'root':
-                    execute(f"cp -a {extract_dir}/* {NGINX_HTML_DIR}/")
+                if deploy_type == "frontend":
+                    check = execute(
+                        f"if [ -f {extract_dir}/index.html ]; then echo 'root'; "
+                        f"else ls -d {extract_dir}/*/index.html 2>/dev/null | head -1; fi"
+                    )
+                    if check == 'root':
+                        execute(f"cp -a {extract_dir}/* {target_dir}/")
+                    else:
+                        subdir = check.rsplit('/index.html', 1)[0]
+                        execute(f"cp -a {subdir}/* {target_dir}/")
                 else:
-                    subdir = check.rsplit('/index.html', 1)[0]
-                    execute(f"cp -a {subdir}/* {NGINX_HTML_DIR}/")
+                    # For backend and algorithm, copy all extracted files into the target_dir
+                    # Check if there's only one root directory in the archive
+                    check_dirs = execute(f"ls -A {extract_dir} | wc -l").strip()
+                    if check_dirs == '1':
+                        only_item = execute(f"ls -A {extract_dir}").strip()
+                        if execute(f"if [ -d {extract_dir}/{only_item} ]; then echo 'DIR'; else echo 'FILE'; fi") == 'DIR':
+                            execute(f"cp -a {extract_dir}/{only_item}/* {target_dir}/")
+                        else:
+                            execute(f"cp -a {extract_dir}/* {target_dir}/")
+                    else:
+                        execute(f"cp -a {extract_dir}/* {target_dir}/")
 
                 execute(f"rm -rf {extract_dir} {remote_tmp}.pkg")
                 step_log("解压并替换代码", "success")
             except Exception as e:
                 step_log("解压并替换代码", "failed", str(e))
-                # Auto rollback
                 try:
-                    execute(f"rm -rf {NGINX_HTML_DIR}/*")
-                    execute(f"tar -xzf {NGINX_BACKUP_DIR}/{backup_name} -C {NGINX_BASE_DIR}")
+                    execute(f"rm -rf {target_dir}/*")
+                    execute(f"tar -xzf {backup_dir}/{backup_name} -C {target_parent}")
                     step_log("自动回滚", "success", f"已回滚到 {backup_name}")
                 except Exception:
                     step_log("自动回滚", "failed", "回滚也失败了，请手动处理")
@@ -232,25 +248,28 @@ class DeployService:
                     success=False, steps=steps, error="Extract failed"
                 )
 
-            # 6. Restart Nginx container
-            try:
-                execute(f"cd {NGINX_BASE_DIR} && docker-compose restart {NGINX_CONTAINER_NAME}")
-                step_log("重启Nginx容器", "success")
-            except Exception as e:
-                step_log("重启Nginx容器", "failed", str(e))
-                return DeployResult(
-                    server=server_name, resource_id=resource.id,
-                    success=False, steps=steps, error="Nginx restart failed"
-                )
+            # 6. Restart Container(s)
+            if restart_container:
+                for cmd in restart_commands:
+                    try:
+                        execute(cmd)
+                        step_log("重启容器", "success", cmd)
+                    except Exception as e:
+                        step_log("重启容器", "failed", str(e))
+                        return DeployResult(
+                            server=server_name, resource_id=resource.id,
+                            success=False, steps=steps, error="Container restart failed"
+                        )
+            else:
+                step_log("重启容器", "success", "用户选择跳过重启")
 
-            # 7. Restart keepalived (if requested)
-            if restart_keepalived:
+            # 7. Restart keepalived (only if frontend HA)
+            if restart_keepalived and deploy_type == "frontend":
                 try:
                     execute("systemctl restart keepalived")
                     step_log("重启keepalived", "success")
                 except Exception as e:
                     step_log("重启keepalived", "failed", str(e))
-
             return DeployResult(server=server_name, resource_id=resource.id, success=True, steps=steps)
 
         except Exception as e:
@@ -373,40 +392,47 @@ class DeployService:
 
             # Check backup exists
             try:
-                execute(f"test -f {NGINX_BACKUP_DIR}/{backup_name}")
+                execute(f"test -f {backup_dir}/{backup_name}")
             except Exception:
                 return DeployResult(
                     server=server_name, resource_id=resource.id,
                     success=False, steps=steps, error=f"Backup {backup_name} not found"
                 )
 
-            # Clear and restore
+            # Rollback
             try:
-                execute(f"rm -rf {NGINX_HTML_DIR}/*")
-                execute(f"tar -xzf {NGINX_BACKUP_DIR}/{backup_name} -C {NGINX_BASE_DIR}")
-                step_log("恢复备份代码", "success", backup_name)
+                execute(f"rm -rf {target_dir}/*")
+                execute(f"tar -xzf {backup_dir}/{backup_name} -C {target_parent}")
+                step_log("恢复备份", "success", backup_name)
             except Exception as e:
-                step_log("恢复备份代码", "failed", str(e))
+                step_log("恢复备份", "failed", str(e))
                 return DeployResult(
                     server=server_name, resource_id=resource.id,
-                    success=False, steps=steps, error="Restore failed"
+                    success=False, steps=steps, error="Rollback failed"
                 )
 
-            # Restart Nginx
-            try:
-                execute(f"cd {NGINX_BASE_DIR} && docker-compose restart {NGINX_CONTAINER_NAME}")
-                step_log("重启Nginx容器", "success")
-            except Exception as e:
-                step_log("重启Nginx容器", "failed", str(e))
+            # Restart Container(s)
+            if restart_container:
+                for cmd in restart_commands:
+                    try:
+                        execute(cmd)
+                        step_log("重启容器", "success", cmd)
+                    except Exception as e:
+                        step_log("重启容器", "failed", str(e))
+                        return DeployResult(
+                            server=server_name, resource_id=resource.id,
+                            success=False, steps=steps, error="Container restart failed"
+                        )
+            else:
+                step_log("重启容器", "success", "用户选择跳过重启")
 
-            # Restart keepalived if requested
-            if restart_keepalived:
+            # Restart keepalived
+            if restart_keepalived and deploy_type == "frontend":
                 try:
                     execute("systemctl restart keepalived")
                     step_log("重启keepalived", "success")
                 except Exception as e:
                     step_log("重启keepalived", "failed", str(e))
-
             return DeployResult(server=server_name, resource_id=resource.id, success=True, steps=steps)
 
         except Exception as e:

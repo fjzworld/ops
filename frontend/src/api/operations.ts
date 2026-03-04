@@ -62,23 +62,24 @@ export const operationsApi = {
         return api.get<OperationExecution>(`/operations/executions/${executionId}`)
     },
 
-    uploadDist(file: File) {
+    uploadDist(file: File, deployType: string = 'frontend') {
         const formData = new FormData()
         formData.append('file', file)
         return api.post<UploadResponse>('/operations/deploy/upload', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
+            params: { deploy_type: deployType },
             timeout: 120000,
         })
     },
-    executeDeploy(params: { file_id: string; resource_ids: number[]; restart_keepalived: boolean }) {
+    executeDeploy(params: { file_id: string; deploy_type: string; resource_ids: number[]; restart_keepalived: boolean; restart_container: boolean }) {
         return api.post<DeployResponse>('/operations/deploy/execute', params)
     },
-    getBackups(resourceId: number) {
+    getBackups(resourceId: number, deployType: string = 'frontend') {
         return api.get<BackupInfo[]>('/operations/deploy/backups', {
-            params: { resource_id: resourceId },
+            params: { resource_id: resourceId, deploy_type: deployType },
         })
     },
-    rollback(params: { resource_id: number; backup_name: string }) {
+    rollback(params: { resource_id: number; deploy_type: string; backup_name: string }) {
         return api.post<DeployResponse>('/operations/deploy/rollback', params)
     },
 }

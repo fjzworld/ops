@@ -6,6 +6,14 @@
         <span class="step-badge">1</span>
         上传构建包
       </div>
+      <div class="deploy-type-selector">
+        <el-radio-group v-model="deployType" class="type-radio-group" @change="resetUploadState">
+          <el-radio-button value="frontend">前端代码 (Nginx)</el-radio-button>
+          <el-radio-button value="backend">后端代码 (Docker-Compose)</el-radio-button>
+          <el-radio-button value="algorithm">算法代码 (多容器)</el-radio-button>
+        </el-radio-group>
+      </div>
+
       <div class="upload-area">
         <el-upload
           ref="uploadRef"
@@ -78,9 +86,14 @@
           暂无可用资源，请先在资源管理中添加服务器
         </div>
       </div>
-      <div class="keepalived-option" v-if="selectedResourceIds.length === 2">
+      <div class="keepalived-option" v-if="deployType === 'frontend' && selectedResourceIds.length === 2">
         <el-checkbox v-model="restartKeepalived">
           同时重启 keepalived（双机高可用模式）
+        </el-checkbox>
+      </div>
+      <div class="keepalived-option" v-if="deployType !== 'frontend' && selectedResourceIds.length > 0">
+        <el-checkbox v-model="restartContainer">
+          部署完成后，自动执行容器重启操作
         </el-checkbox>
       </div>
     </div>
@@ -236,9 +249,10 @@ const selectedResourceIds = ref<number[]>([])
 const restartKeepalived = ref(false)
 
 // Deploy state
+const deployType = ref('frontend')
+const restartContainer = ref(true)
 const deploying = ref(false)
 const deployResults = ref<DeployResult[]>([])
-
 // Rollback state
 const showRollbackDialog = ref(false)
 const rollbackResourceId = ref<number | null>(null)
@@ -252,6 +266,13 @@ const canDeploy = computed(() => {
 })
 
 // File handling
+const resetUploadState = () => {
+  selectedFile.value = null
+  uploadResult.value = null
+  fileId.value = ''
+  uploadRef.value?.clearFiles()
+}
+
 const handleFileChange = (file: UploadFile) => {
   selectedFile.value = file.raw || null
   uploadResult.value = null
@@ -273,7 +294,7 @@ const handleUpload = async () => {
   if (!selectedFile.value) return
   uploading.value = true
   try {
-    const { data } = await operationsApi.uploadDist(selectedFile.value)
+    const { data } = await operationsApi.uploadDist(selectedFile.value, deployType.value)
     uploadResult.value = data
     if (data.valid) {
       fileId.value = data.file_id
@@ -294,14 +315,14 @@ const toggleServer = (id: number) => {
   if (idx >= 0) {
     selectedResourceIds.value.splice(idx, 1)
   } else {
-    if (selectedResourceIds.value.length >= 2) {
-      ElMessage.warning('最多选择 2 台服务器')
+    if (deployType.value === 'frontend' && selectedResourceIds.value.length >= 2) {
+      ElMessage.warning('前端部署最多选择 2 台服务器')
       return
     }
     selectedResourceIds.value.push(id)
   }
-  // Auto-check keepalived when 2 servers selected
-  if (selectedResourceIds.value.length === 2) {
+  // Auto-check keepalived when 2 servers selected (frontend)
+  if (deployType.value === 'frontend' && selectedResourceIds.value.length === 2) {
     restartKeepalived.value = true
   } else {
     restartKeepalived.value = false
@@ -354,7 +375,7 @@ const loadBackups = async (resourceId: number) => {
   loadingBackups.value = true
   rollbackBackupName.value = ''
   try {
-    const { data } = await operationsApi.getBackups(resourceId)
+    const { data } = await operationsApi.getBackups(resourceId, deployType.value)
     backups.value = data
   } catch {
     ElMessage.error('获取备份列表失败')
@@ -380,6 +401,7 @@ const handleRollback = async () => {
   try {
     const { data } = await operationsApi.rollback({
       resource_id: rollbackResourceId.value,
+      deploy_type: deployType.value,
       backup_name: rollbackBackupName.value
     })
     if (data.success) {
@@ -475,6 +497,23 @@ onMounted(() => {
 
 .dist-upload {
   width: 100%;
+}
+
+.deploy-type-selector {
+  margin-bottom: 20px;
+}
+
+:deep(.type-radio-group .el-radio-button__inner) {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #94A3B8;
+}
+
+:deep(.type-radio-group .el-radio-button__original-radio:checked + .el-radio-button__inner) {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #3b82f6;
+  color: #fff;
+  box-shadow: -1px 0 0 0 #3b82f6;
 }
 
 :deep(.el-upload-dragger) {

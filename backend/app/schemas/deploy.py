@@ -5,16 +5,15 @@ from typing import List, Optional
 class DeployExecuteRequest(BaseModel):
     """Request to execute frontend deployment"""
     file_id: str = Field(..., description="Uploaded file ID from upload endpoint")
+    deploy_type: str = Field(default="frontend", description="Type of deployment: frontend, backend, or algorithm")
     resource_ids: List[int] = Field(..., min_length=1, max_length=2, description="Target resource IDs from CMDB")
     restart_keepalived: bool = Field(default=False, description="Whether to restart keepalived (for 2-server HA)")
-
-
+    restart_container: bool = Field(default=True, description="Whether to restart container after deploy")
 class DeployRollbackRequest(BaseModel):
     """Request to rollback to a backup"""
     resource_id: int
+    deploy_type: str = Field(default="frontend", description="Type of deployment to determine paths")
     backup_name: str = Field(..., description="Backup filename like html_20260226_110000.tar.gz")
-
-
 class DeployStepLog(BaseModel):
     """Single step log entry"""
     server: str
@@ -49,6 +48,7 @@ class UploadResponse(BaseModel):
     """Upload response"""
     file_id: str
     filename: str
+    deploy_type: str = "frontend"
     size: int
     valid: bool
     message: str

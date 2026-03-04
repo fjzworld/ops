@@ -27,7 +27,7 @@ from app.core.exceptions import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-MAX_UPLOAD_SIZE = 200 * 1024 * 1024  # 200MB
+MAX_UPLOAD_SIZE = 2000 * 1024 * 1024  # 2000MB (2GB)
 
 
 # ========== Generic Operation CRUD ==========
@@ -261,15 +261,15 @@ async def upload_dist_package(
     except ValueError as e:
         raise BadRequestException(message=str(e))
 
-    valid, message = DeployService.validate_package(saved_path)
+    deploy_type = request.query_params.get('deploy_type', 'frontend')
+    valid, message = DeployService.validate_package(saved_path, deploy_type)
     if not valid:
         DeployService.cleanup_upload(file_id)
         raise BadRequestException(message=message)
 
     return UploadResponse(
-        file_id=file_id, filename=file.filename,
+        file_id=file_id, filename=file.filename, deploy_type=deploy_type,
         size=len(content), valid=True,
-        message="Package uploaded and validated successfully"
     )
 
 
@@ -317,7 +317,11 @@ async def execute_deploy(
 
     try:
         results = await DeployService.deploy_to_servers(
-            file_path, resources, request.restart_keepalived
+            file_path,
+            resources,
+            deploy_type=request.deploy_type,
+            restart_keepalived=request.restart_keepalived,
+            restart_container=request.restart_container
         )
     except Exception as e:
         logger.error(f"Deployment failed: {e}")
@@ -365,6 +369,7 @@ async def execute_deploy(
 @router.get("/deploy/backups", response_model=List[BackupInfo])
 async def get_backups(
     resource_id: int,
+    deploy_type: str = Query("frontend", description="Type of deployment"),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_async_db),
 ):
@@ -377,7 +382,7 @@ async def get_backups(
         raise NotFoundException(message="Resource not found")
 
     try:
-        backups = await DeployService.get_backups(resource)
+        backups = await DeployService.get_backups(resource, deploy_type=deploy_type)
         return [BackupInfo(**b) for b in backups]
     except Exception as e:
         raise InternalServerError(message=f"Failed to get backups: {str(e)}")
@@ -397,5 +402,5 @@ async def rollback_deploy(
     if not resource:
         raise NotFoundException(message="Resource not found")
 
-    result = await DeployService.rollback(resource, request.backup_name)
+    result = await DeployService.rollback(resource, request.backup_name, deploy_type=request.deploy_type)
     return DeployResponse(success=result.success, results=[result])
