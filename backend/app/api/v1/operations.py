@@ -2,7 +2,7 @@ import os
 import logging
 from typing import List, Optional
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, Query, UploadFile, File, status
+from fastapi import APIRouter, Depends, Query, UploadFile, File, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -238,6 +238,7 @@ async def get_execution_details(
 
 @router.post("/deploy/upload", response_model=UploadResponse)
 async def upload_dist_package(
+    request: Request,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
 ):

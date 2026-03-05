@@ -133,6 +133,24 @@ class DeployService:
             else:
                 logger.info(f"[Deploy:{server_name}] {step}: {status} {message}")
 
+        # Define paths based on deploy_type
+        if deploy_type == "frontend":
+            target_dir = NGINX_HTML_DIR
+            target_parent = NGINX_BASE_DIR
+            target_folder = "html"
+            backup_dir = NGINX_BACKUP_DIR
+            backup_prefix = "html"
+            restart_commands = [f"docker restart {NGINX_CONTAINER_NAME}"]
+        else:
+            # For backend/algorithm deployments - these should be configured per resource
+            # Using defaults for now
+            target_dir = f"/opt/{deploy_type}"
+            target_parent = "/opt"
+            target_folder = deploy_type
+            backup_dir = f"/opt/backup/{deploy_type}"
+            backup_prefix = deploy_type
+            restart_commands = [f"systemctl restart {deploy_type}"]
+
         credentials = CredentialService.get_ssh_credentials(resource)
         client = create_secure_client()
 
@@ -339,7 +357,7 @@ class DeployService:
             client.close()
 
     @staticmethod
-    async def rollback(resource: Resource, backup_name: str, restart_keepalived: bool = False) -> DeployResult:
+    async def rollback(resource: Resource, backup_name: str, deploy_type: str = "frontend", restart_keepalived: bool = False, restart_container: bool = True) -> DeployResult:
         """Rollback to a specific backup"""
         server_name = resource.ip_address or resource.name
         steps: List[DeployStepLog] = []
@@ -347,8 +365,20 @@ class DeployService:
         def step_log(step: str, status: str, message: str = ""):
             steps.append(DeployStepLog(server=server_name, step=step, status=status, message=message))
 
+        # Define paths based on deploy_type
+        if deploy_type == "frontend":
+            target_dir = NGINX_HTML_DIR
+            target_parent = NGINX_BASE_DIR
+            backup_dir = NGINX_BACKUP_DIR
+            restart_commands = [f"docker restart {NGINX_CONTAINER_NAME}"]
+        else:
+            target_dir = f"/opt/{deploy_type}"
+            target_parent = "/opt"
+            backup_dir = f"/opt/backup/{deploy_type}"
+            restart_commands = [f"systemctl restart {deploy_type}"]
+
         # Validate backup_name to prevent injection
-        if not backup_name.startswith("html_") or not backup_name.endswith(".tar.gz"):
+        if not backup_name.startswith(f"{deploy_type}_") or not backup_name.endswith(".tar.gz"):
             return DeployResult(
                 server=server_name, resource_id=resource.id,
                 success=False, steps=steps, error="Invalid backup name"
