@@ -8,10 +8,20 @@ from sqlalchemy import select
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
-from app.core.database import engine, Base, AsyncSessionLocal, async_engine
+from app.core.database import Base, AsyncSessionLocal, async_engine
 from app.core.exceptions import AppException
 from app.core.rate_limit import limiter
-from app.api.v1 import auth, users, resources, monitoring, alerts, containers, middlewares, logs, operations
+from app.api.v1 import (
+    auth,
+    users,
+    resources,
+    monitoring,
+    alerts,
+    containers,
+    middlewares,
+    logs,
+    operations,
+)
 from app.services.scheduler import SchedulerService
 from app.models.operation import Operation, OperationType
 
@@ -24,6 +34,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events"""
@@ -35,7 +46,9 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as db:
         try:
             result = await db.execute(
-                select(Operation).filter(Operation.operation_type == OperationType.SCRIPT_EXEC)
+                select(Operation).filter(
+                    Operation.operation_type == OperationType.SCRIPT_EXEC
+                )
             )
             ops = result.scalars().all()
             for op in ops:
@@ -43,8 +56,9 @@ async def lifespan(app: FastAPI):
             logger.info(f"Synced {len(ops)} operations to scheduler")
         except Exception as e:
             logger.error(f"Error syncing operations on startup: {e}")
-    
+
     yield
+
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -54,7 +68,7 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Add rate limiter to app
@@ -80,7 +94,9 @@ app.include_router(resources.router, prefix="/api/v1/resources", tags=["Resource
 app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["Monitoring"])
 app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["Alerts"])
 app.include_router(operations.router, prefix="/api/v1/operations", tags=["Operations"])
-app.include_router(middlewares.router, prefix="/api/v1/middlewares", tags=["Middlewares"])
+app.include_router(
+    middlewares.router, prefix="/api/v1/middlewares", tags=["Middlewares"]
+)
 app.include_router(logs.router, prefix="/api/v1/logs", tags=["Logs"])
 
 # Prometheus metrics endpoint
@@ -94,7 +110,7 @@ async def root():
     return {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "status": "running"
+        "status": "running",
     }
 
 
@@ -112,8 +128,8 @@ async def app_exception_handler(request: Request, exc: AppException):
         content={
             "code": exc.status_code,
             "detail": exc.message,
-            "details": exc.details
-        }
+            "details": exc.details,
+        },
     )
 
 
@@ -122,11 +138,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     """Handle validation errors"""
     return JSONResponse(
         status_code=422,
-        content={
-            "code": 422,
-            "message": "Validation Error",
-            "details": exc.errors()
-        }
+        content={"code": 422, "message": "Validation Error", "details": exc.errors()},
     )
 
 
@@ -134,11 +146,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler - 生产环境不暴露详细错误信息"""
     import traceback
-    
+
     # 记录详细错误日志（用于调试）
     error_trace = traceback.format_exc()
     logger.error(f"{request.method} {request.url}: {str(exc)}\n{error_trace}")
-    
+
     # 生产环境返回通用错误，开发环境返回详细信息
     if settings.DEBUG:
         return JSONResponse(
@@ -146,20 +158,17 @@ async def global_exception_handler(request: Request, exc: Exception):
             content={
                 "code": 500,
                 "message": f"Internal server error: {str(exc)}",
-                "details": {"trace": error_trace}
-            }
+                "details": {"trace": error_trace},
+            },
         )
     else:
         return JSONResponse(
             status_code=500,
-            content={
-                "code": 500,
-                "message": "Internal server error",
-                "details": {}
-            }
+            content={"code": 500, "message": "Internal server error", "details": {}},
         )
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

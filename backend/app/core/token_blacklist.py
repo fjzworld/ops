@@ -2,8 +2,8 @@
 Token blacklist using Redis for server-side JWT invalidation.
 Tokens are blacklisted on logout with a TTL matching their remaining lifetime.
 """
+
 import logging
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +13,7 @@ BLACKLIST_PREFIX = "token_blacklist:"
 def _get_redis_client():
     """Lazy import to avoid circular dependencies with rate_limit module."""
     from app.core.rate_limit import redis_client
+
     return redis_client
 
 
@@ -53,5 +54,7 @@ def is_token_blacklisted(token: str) -> bool:
         return client.exists(key) > 0
     except Exception as e:
         # Fail open: if Redis is down, allow the request but log warning
-        logger.warning(f"Redis unavailable for token blacklist check: {e}. Allowing request.")
+        logger.warning(
+            f"Redis unavailable for token blacklist check: {e}. Allowing request."
+        )
         return False

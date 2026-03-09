@@ -6,6 +6,7 @@ from app.models.alert import AlertSeverity, AlertStatus
 
 class AlertRuleBase(BaseModel):
     """Base alert rule schema"""
+
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
     metric: str
@@ -19,11 +20,13 @@ class AlertRuleBase(BaseModel):
 
 class AlertRuleCreate(AlertRuleBase):
     """Schema for creating an alert rule"""
+
     pass
 
 
 class AlertRuleUpdate(BaseModel):
     """Schema for updating an alert rule"""
+
     description: Optional[str] = None
     threshold: Optional[float] = None
     duration: Optional[int] = None
@@ -34,17 +37,19 @@ class AlertRuleUpdate(BaseModel):
 
 class AlertRuleInDB(AlertRuleBase):
     """Schema for alert rule in database"""
+
     id: int
     enabled: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 
 
 class AlertBase(BaseModel):
     """Base alert schema"""
+
     rule_id: int
     resource_id: Optional[int] = None
     severity: AlertSeverity
@@ -55,6 +60,7 @@ class AlertBase(BaseModel):
 
 class AlertInDB(AlertBase):
     """Schema for alert in database"""
+
     id: int
     status: AlertStatus
     labels: Dict[str, str]
@@ -63,18 +69,20 @@ class AlertInDB(AlertBase):
     resolved_at: Optional[datetime] = None
     acknowledged_at: Optional[datetime] = None
     acknowledged_by: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
 
 
 class AlertAcknowledge(BaseModel):
     """Schema for acknowledging an alert"""
+
     acknowledged_by: str
 
 
 class AlertStats(BaseModel):
     """Schema for alert statistics summary"""
+
     total: int
     firing: int
     acknowledged: int
@@ -84,4 +92,5 @@ class AlertStats(BaseModel):
 
 class MessageResponse(BaseModel):
     """Generic message response schema"""
+
     message: str

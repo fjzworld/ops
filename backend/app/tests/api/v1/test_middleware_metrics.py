@@ -17,6 +17,7 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 Base.metadata.create_all(bind=engine)
 
+
 def override_get_db():
     try:
         db = TestingSessionLocal()
@@ -24,9 +25,11 @@ def override_get_db():
     finally:
         db.close()
 
+
 app.dependency_overrides[get_db] = override_get_db
 
 client = TestClient(app)
+
 
 @pytest.fixture
 def db():
@@ -40,13 +43,14 @@ def db():
         # Drop the database tables after the test
         Base.metadata.drop_all(bind=engine)
 
+
 def test_get_middleware_metrics_endpoint_exists(db):
     # Setup: Create a resource and a middleware
     resource = Resource(
         name="test-resource",
         type=ResourceType.PHYSICAL,
         status=ResourceStatus.ACTIVE,
-        ip_address="127.0.0.1"
+        ip_address="127.0.0.1",
     )
     db.add(resource)
     db.commit()
@@ -59,7 +63,7 @@ def test_get_middleware_metrics_endpoint_exists(db):
         port=3306,
         service_name="mysql",
         log_path="/var/log/mysql/error.log",
-        status="active"
+        status="active",
     )
     db.add(middleware)
     db.commit()
@@ -73,4 +77,6 @@ def test_get_middleware_metrics_endpoint_exists(db):
     # Ideally we'd auth, but for "existence check", !404 is enough proof it's registered
     # However, since we need to fix it, let's aim for the actual behavior.
     # Without auth header, it should be 401. If it returns 404, the path is missing.
-    assert response.status_code != 404, "Endpoint /api/v1/middlewares/{id}/metrics not found"
+    assert response.status_code != 404, (
+        "Endpoint /api/v1/middlewares/{id}/metrics not found"
+    )

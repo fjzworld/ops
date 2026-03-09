@@ -1,4 +1,5 @@
 """Initialize tasks package"""
+
 from app.tasks.celery_app import celery_app
 from app.tasks.automation import run_automation_task
 from app.tasks.deployment import deploy_alloy_task

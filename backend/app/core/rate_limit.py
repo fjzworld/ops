@@ -2,12 +2,12 @@
 Rate limiting configuration for API endpoints
 Uses Redis as storage backend for distributed rate limiting
 """
+
 import logging
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
-from functools import wraps
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 import redis
@@ -20,14 +20,14 @@ redis_client = redis.from_url(
     decode_responses=True,
     socket_connect_timeout=5,
     socket_timeout=5,
-    health_check_interval=30
+    health_check_interval=30,
 )
 
 # Initialize Limiter with Redis storage
 limiter = Limiter(
     key_func=get_remote_address,
     storage_uri=settings.REDIS_URL,
-    default_limits=["200 per minute", "1000 per hour"]
+    default_limits=["200 per minute", "1000 per hour"],
 )
 
 
@@ -58,18 +58,18 @@ def sensitive_operation_limit():
 def check_rate_limit(request: Request, max_requests: int = 60, window: int = 60):
     """
     Manual rate limit check for custom endpoints
-    
+
     Args:
         request: FastAPI request object
         max_requests: Maximum requests allowed in window
         window: Time window in seconds
-    
+
     Raises:
         HTTPException: If rate limit exceeded
     """
     client_ip = get_remote_address(request)
     key = f"ratelimit:{client_ip}:{request.url.path}"
-    
+
     try:
         current = redis_client.get(key)
         if current is None:
@@ -77,7 +77,7 @@ def check_rate_limit(request: Request, max_requests: int = 60, window: int = 60)
         elif int(current) >= max_requests:
             raise HTTPException(
                 status_code=429,
-                detail=f"Rate limit exceeded. Try again in {window} seconds."
+                detail=f"Rate limit exceeded. Try again in {window} seconds.",
             )
         else:
             redis_client.incr(key)
@@ -91,8 +91,5 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     """Custom handler for rate limit exceeded"""
     return JSONResponse(
         status_code=429,
-        content={
-            "code": 429,
-            "message": "Too many requests. Please slow down."
-        }
+        content={"code": 429, "message": "Too many requests. Please slow down."},
     )

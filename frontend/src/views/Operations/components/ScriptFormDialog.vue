@@ -28,6 +28,17 @@
         </el-select>
       </el-form-item>
 
+      <el-form-item label="执行机器" prop="targetResources">
+        <el-select v-model="form.targetResources" multiple placeholder="请选择要执行脚本的机器" style="width: 100%">
+          <el-option
+            v-for="res in resourcesList"
+            :key="res.id"
+            :label="`${res.name} (${res.ip_address})`"
+            :value="res.id"
+          />
+        </el-select>
+      </el-form-item>
+
       <el-form-item label="任务描述" prop="description">
         <el-input v-model="form.description" type="textarea" :rows="2" placeholder="简要说明任务用途" />
       </el-form-item>
@@ -76,6 +87,9 @@ import { VueMonacoEditor } from '@guolao/vue-monaco-editor'
 import { operationsApi } from '@/api/operations'
 import type { Operation } from '@/types/operation'
 import { OperationType } from '@/types/operation'
+import { resourceApi } from '@/api/resources'
+import type { Resource } from '@/types/resource'
+import { onMounted } from 'vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -86,6 +100,16 @@ const emit = defineEmits(['update:modelValue', 'saved'])
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const resourcesList = ref<Resource[]>([])
+
+onMounted(async () => {
+  try {
+    const { data } = await resourceApi.list()
+    resourcesList.value = data || []
+  } catch (error) {
+    ElMessage.error('无法加载资源机器列表')
+  }
+})
 
 const editorOptions = {
   minimap: { enabled: false },
@@ -110,6 +134,7 @@ const form = reactive({
   description: '',
   scriptContent: '',
   schedule: '',
+  targetResources: [] as number[],
   enabled: true
 })
 
@@ -120,6 +145,9 @@ const rules = reactive<FormRules>({
   ],
   taskType: [
     { required: true, message: '请选择脚本类型', trigger: 'change' }
+  ],
+  targetResources: [
+    { required: true, type: 'array', message: '请选择至少一台执行机器', trigger: 'change' }
   ],
   scriptContent: [
     { required: true, message: '请输入脚本内容', trigger: 'blur' }
@@ -135,6 +163,7 @@ watch(() => props.modelValue, (val) => {
         description: props.operation.description || '',
         scriptContent: props.operation.config?.script_content || '',
         schedule: props.operation.schedule || '',
+        targetResources: props.operation.target_resources || [],
         enabled: props.operation.enabled
       })
     } else {
@@ -144,6 +173,7 @@ watch(() => props.modelValue, (val) => {
         description: '',
         scriptContent: '',
         schedule: '',
+        targetResources: [],
         enabled: true
       })
     }
@@ -169,6 +199,7 @@ const handleSave = async () => {
             task_type: form.taskType,
             script_content: form.scriptContent,
           },
+          target_resources: form.targetResources,
           schedule: form.schedule || undefined,
           enabled: form.enabled,
         }

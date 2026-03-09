@@ -5,12 +5,15 @@ from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.core.database import get_db, Base
 from app.models.task import Task, TaskStatus
-from app.tasks.automation import run_automation_task, summarize_automation_results, execute_single_resource
+from app.tasks.automation import run_automation_task, summarize_automation_results
 
 # Setup Testing DB
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 
 def override_get_db():
     try:
@@ -19,7 +22,9 @@ def override_get_db():
     finally:
         db.close()
 
+
 app.dependency_overrides[get_db] = override_get_db
+
 
 @pytest.fixture
 def db():
@@ -31,11 +36,14 @@ def db():
         db.close()
         Base.metadata.drop_all(bind=engine)
 
+
 @patch("app.tasks.automation.chord")
 @patch("app.tasks.automation.group")
 @patch("app.tasks.automation.execute_single_resource")
 @patch("app.tasks.automation.summarize_automation_results")
-def test_run_automation_task_dispatcher(mock_summarize, mock_execute, mock_group, mock_chord, db):
+def test_run_automation_task_dispatcher(
+    mock_summarize, mock_execute, mock_group, mock_chord, db
+):
     """
     Test Dispatcher:
     - Setup a Task with 2 target resources.
@@ -52,7 +60,7 @@ def test_run_automation_task_dispatcher(mock_summarize, mock_execute, mock_group
         status=TaskStatus.PENDING,
         execution_count=0,
         success_count=0,
-        failure_count=0
+        failure_count=0,
     )
     db.add(task)
     db.commit()
@@ -61,7 +69,7 @@ def test_run_automation_task_dispatcher(mock_summarize, mock_execute, mock_group
     mock_execute.s.side_effect = lambda t_id, r_id: f"sig_execute_{t_id}_{r_id}"
     mock_summarize.s.side_effect = lambda t_id: f"sig_summarize_{t_id}"
     mock_group.return_value = "mock_group_obj"
-    
+
     # Mock chord to return a callable
     mock_chord_instance = MagicMock()
     mock_chord.return_value = mock_chord_instance
@@ -91,6 +99,7 @@ def test_run_automation_task_dispatcher(mock_summarize, mock_execute, mock_group
     mock_chord.assert_called_once_with("mock_group_obj")
     mock_chord_instance.assert_called_once_with(expected_callback)
 
+
 def test_summarize_automation_results_aggregator(db):
     """
     Test Aggregator:
@@ -101,18 +110,28 @@ def test_summarize_automation_results_aggregator(db):
     task = Task(
         id=300,
         name="aggregator-task",
-        task_type="script", # Added missing field
+        task_type="script",  # Added missing field
         status=TaskStatus.RUNNING,
         success_count=0,
         failure_count=0,
-        last_output=""
+        last_output="",
     )
     db.add(task)
     db.commit()
 
     mock_results = [
-        {"resource_id": 101, "status": "success", "output": "Output Success", "exit_code": 0},
-        {"resource_id": 102, "status": "failed", "output": "Output Failed", "exit_code": 1}
+        {
+            "resource_id": 101,
+            "status": "success",
+            "output": "Output Success",
+            "exit_code": 0,
+        },
+        {
+            "resource_id": 102,
+            "status": "failed",
+            "output": "Output Failed",
+            "exit_code": 1,
+        },
     ]
 
     # 2. Call summarize_automation_results

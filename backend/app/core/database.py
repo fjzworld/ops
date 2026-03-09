@@ -6,12 +6,12 @@ from app.core.config import settings
 # Create database engine with optimized connection pool
 engine = create_engine(
     settings.DATABASE_URL,
-    pool_pre_ping=True,      # Verify connections before using
-    pool_size=10,            # Base pool size
-    max_overflow=20,         # Max extra connections under load
-    pool_recycle=3600,       # Recycle connections after 1 hour
-    pool_timeout=30,         # Wait up to 30s for available connection
-    echo=settings.DEBUG      # Log SQL in debug mode
+    pool_pre_ping=True,  # Verify connections before using
+    pool_size=10,  # Base pool size
+    max_overflow=20,  # Max extra connections under load
+    pool_recycle=3600,  # Recycle connections after 1 hour
+    pool_timeout=30,  # Wait up to 30s for available connection
+    echo=settings.DEBUG,  # Log SQL in debug mode
 )
 
 # Create async database engine
@@ -22,7 +22,7 @@ async_engine = create_async_engine(
     max_overflow=20,
     pool_recycle=3600,
     pool_timeout=30,
-    echo=settings.DEBUG
+    echo=settings.DEBUG,
 )
 
 # Create session factory
@@ -54,4 +54,3 @@ async def get_async_db():
     """Dependency for getting async database session"""
     async with AsyncSessionLocal() as db:
         yield db
-

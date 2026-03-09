@@ -29,15 +29,14 @@ NGINX_CONTAINER_NAME = "start_nginx"
 
 
 class DeployService:
-
     @staticmethod
     def save_upload(file_content: bytes, filename: str) -> Tuple[str, str]:
         """Save uploaded file, return (file_id, saved_path)"""
         file_id = uuid.uuid4().hex[:12]
-        if filename.endswith('.tar.gz') or filename.endswith('.tgz'):
-            ext = '.tar.gz'
-        elif filename.endswith('.zip'):
-            ext = '.zip'
+        if filename.endswith(".tar.gz") or filename.endswith(".tgz"):
+            ext = ".tar.gz"
+        elif filename.endswith(".zip"):
+            ext = ".zip"
         else:
             raise ValueError("Only .zip and .tar.gz files are supported")
 
@@ -46,23 +45,25 @@ class DeployService:
         return file_id, str(save_path)
 
     @staticmethod
-    def validate_package(file_path: str, deploy_type: str = "frontend") -> Tuple[bool, str]:
+    def validate_package(
+        file_path: str, deploy_type: str = "frontend"
+    ) -> Tuple[bool, str]:
         """Validate that the package contains expected files based on deploy_type"""
         try:
-            if file_path.endswith('.zip'):
-                with zipfile.ZipFile(file_path, 'r') as zf:
+            if file_path.endswith(".zip"):
+                with zipfile.ZipFile(file_path, "r") as zf:
                     names = zf.namelist()
-            elif file_path.endswith('.tar.gz') or file_path.endswith('.tgz'):
-                with tarfile.open(file_path, 'r:gz') as tf:
+            elif file_path.endswith(".tar.gz") or file_path.endswith(".tgz"):
+                with tarfile.open(file_path, "r:gz") as tf:
                     names = tf.getnames()
             else:
                 return False, "Unsupported file format"
 
             if deploy_type == "frontend":
-                has_index = any(n.endswith('index.html') for n in names)
+                has_index = any(n.endswith("index.html") for n in names)
                 if not has_index:
                     return False, "Frontend package does not contain index.html"
-            
+
             # For backend and algorithm, we just accept the archive as is
             return True, "Package is valid"
         except Exception as e:
@@ -71,7 +72,7 @@ class DeployService:
     @staticmethod
     def get_upload_path(file_id: str) -> Optional[str]:
         """Find uploaded file by file_id"""
-        for ext in ['.zip', '.tar.gz']:
+        for ext in [".zip", ".tar.gz"]:
             path = UPLOAD_DIR / f"{file_id}{ext}"
             if path.exists():
                 return str(path)
@@ -80,7 +81,7 @@ class DeployService:
     @staticmethod
     def cleanup_upload(file_id: str):
         """Remove uploaded file"""
-        for ext in ['.zip', '.tar.gz']:
+        for ext in [".zip", ".tar.gz"]:
             path = UPLOAD_DIR / f"{file_id}{ext}"
             if path.exists():
                 path.unlink()
@@ -91,11 +92,13 @@ class DeployService:
         resources: List[Resource],
         deploy_type: str = "frontend",
         restart_keepalived: bool = False,
-        restart_container: bool = True
+        restart_container: bool = True,
     ) -> List[DeployResult]:
         """Deploy code to multiple servers in parallel"""
         tasks = [
-            DeployService._deploy_single(file_path, resource, deploy_type, restart_keepalived, restart_container)
+            DeployService._deploy_single(
+                file_path, resource, deploy_type, restart_keepalived, restart_container
+            )
             for resource in resources
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -103,12 +106,14 @@ class DeployService:
         deploy_results: List[DeployResult] = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                deploy_results.append(DeployResult(
-                    server=resources[i].ip_address or resources[i].name,
-                    resource_id=resources[i].id,
-                    success=False,
-                    error=str(result)
-                ))
+                deploy_results.append(
+                    DeployResult(
+                        server=resources[i].ip_address or resources[i].name,
+                        resource_id=resources[i].id,
+                        success=False,
+                        error=str(result),
+                    )
+                )
             else:
                 deploy_results.append(result)
 
@@ -120,14 +125,18 @@ class DeployService:
         resource: Resource,
         deploy_type: str,
         restart_keepalived: bool,
-        restart_container: bool
+        restart_container: bool,
     ) -> DeployResult:
         """Deploy to a single server via SSH"""
         server_name = resource.ip_address or resource.name
         steps: List[DeployStepLog] = []
 
         def step_log(step: str, status: str, message: str = ""):
-            steps.append(DeployStepLog(server=server_name, step=step, status=status, message=message))
+            steps.append(
+                DeployStepLog(
+                    server=server_name, step=step, status=status, message=message
+                )
+            )
             if status == "failed":
                 logger.error(f"[Deploy:{server_name}] {step}: {message}")
             else:
@@ -164,7 +173,9 @@ class DeployService:
                 "allow_agent": False,
             }
             if credentials.private_key:
-                connect_kwargs["pkey"] = paramiko.RSAKey.from_private_key_file(credentials.private_key)
+                connect_kwargs["pkey"] = paramiko.RSAKey.from_private_key_file(
+                    credentials.private_key
+                )
             else:
                 connect_kwargs["password"] = credentials.password
 
@@ -172,14 +183,16 @@ class DeployService:
             step_log("SSH连接", "success")
 
             def execute(cmd: str) -> str:
-                if credentials.username != 'root':
+                if credentials.username != "root":
                     cmd = f"sudo {cmd}"
                 stdin, stdout, stderr = client.exec_command(cmd)
                 exit_status = stdout.channel.recv_exit_status()
                 out = stdout.read().decode().strip()
                 err = stderr.read().decode().strip()
                 if exit_status != 0:
-                    raise RuntimeError(f"Command failed (exit {exit_status}): {err or out}")
+                    raise RuntimeError(
+                        f"Command failed (exit {exit_status}): {err or out}"
+                    )
                 return out
 
             # 1. Create backup directory
@@ -189,7 +202,9 @@ class DeployService:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_name = f"{backup_prefix}_{timestamp}.tar.gz"
             try:
-                execute(f"tar -czf {backup_dir}/{backup_name} -C {target_parent} {target_folder}/")
+                execute(
+                    f"tar -czf {backup_dir}/{backup_name} -C {target_parent} {target_folder}/"
+                )
                 step_log("备份当前代码", "success", backup_name)
             except Exception as e:
                 step_log("备份当前代码", "failed", str(e))
@@ -197,7 +212,9 @@ class DeployService:
 
             # 3. Clean old backups (older than 3 days)
             try:
-                execute(f"find {backup_dir} -name '{backup_prefix}_*.tar.gz' -mtime +3 -delete")
+                execute(
+                    f"find {backup_dir} -name '{backup_prefix}_*.tar.gz' -mtime +3 -delete"
+                )
                 step_log("清理旧备份", "success")
             except Exception:
                 step_log("清理旧备份", "success", "No old backups to clean")
@@ -211,8 +228,11 @@ class DeployService:
             except Exception as e:
                 step_log("上传代码包", "failed", str(e))
                 return DeployResult(
-                    server=server_name, resource_id=resource.id,
-                    success=False, steps=steps, error="Upload failed"
+                    server=server_name,
+                    resource_id=resource.id,
+                    success=False,
+                    steps=steps,
+                    error="Upload failed",
                 )
 
             # 5. Clear target dir and extract
@@ -222,7 +242,7 @@ class DeployService:
                 extract_id = uuid.uuid4().hex[:8]
                 extract_dir = f"/tmp/deploy_extract_{extract_id}"
 
-                if file_path.endswith('.zip'):
+                if file_path.endswith(".zip"):
                     execute(f"unzip -o {remote_tmp}.pkg -d {extract_dir}")
                 else:
                     execute(f"mkdir -p {extract_dir}")
@@ -233,18 +253,23 @@ class DeployService:
                         f"if [ -f {extract_dir}/index.html ]; then echo 'root'; "
                         f"else ls -d {extract_dir}/*/index.html 2>/dev/null | head -1; fi"
                     )
-                    if check == 'root':
+                    if check == "root":
                         execute(f"cp -a {extract_dir}/* {target_dir}/")
                     else:
-                        subdir = check.rsplit('/index.html', 1)[0]
+                        subdir = check.rsplit("/index.html", 1)[0]
                         execute(f"cp -a {subdir}/* {target_dir}/")
                 else:
                     # For backend and algorithm, copy all extracted files into the target_dir
                     # Check if there's only one root directory in the archive
                     check_dirs = execute(f"ls -A {extract_dir} | wc -l").strip()
-                    if check_dirs == '1':
+                    if check_dirs == "1":
                         only_item = execute(f"ls -A {extract_dir}").strip()
-                        if execute(f"if [ -d {extract_dir}/{only_item} ]; then echo 'DIR'; else echo 'FILE'; fi") == 'DIR':
+                        if (
+                            execute(
+                                f"if [ -d {extract_dir}/{only_item} ]; then echo 'DIR'; else echo 'FILE'; fi"
+                            )
+                            == "DIR"
+                        ):
                             execute(f"cp -a {extract_dir}/{only_item}/* {target_dir}/")
                         else:
                             execute(f"cp -a {extract_dir}/* {target_dir}/")
@@ -262,8 +287,11 @@ class DeployService:
                 except Exception:
                     step_log("自动回滚", "failed", "回滚也失败了，请手动处理")
                 return DeployResult(
-                    server=server_name, resource_id=resource.id,
-                    success=False, steps=steps, error="Extract failed"
+                    server=server_name,
+                    resource_id=resource.id,
+                    success=False,
+                    steps=steps,
+                    error="Extract failed",
                 )
 
             # 6. Restart Container(s)
@@ -275,8 +303,11 @@ class DeployService:
                     except Exception as e:
                         step_log("重启容器", "failed", str(e))
                         return DeployResult(
-                            server=server_name, resource_id=resource.id,
-                            success=False, steps=steps, error="Container restart failed"
+                            server=server_name,
+                            resource_id=resource.id,
+                            success=False,
+                            steps=steps,
+                            error="Container restart failed",
                         )
             else:
                 step_log("重启容器", "success", "用户选择跳过重启")
@@ -288,13 +319,18 @@ class DeployService:
                     step_log("重启keepalived", "success")
                 except Exception as e:
                     step_log("重启keepalived", "failed", str(e))
-            return DeployResult(server=server_name, resource_id=resource.id, success=True, steps=steps)
+            return DeployResult(
+                server=server_name, resource_id=resource.id, success=True, steps=steps
+            )
 
         except Exception as e:
             step_log("部署异常", "failed", str(e))
             return DeployResult(
-                server=server_name, resource_id=resource.id,
-                success=False, steps=steps, error=str(e)
+                server=server_name,
+                resource_id=resource.id,
+                success=False,
+                steps=steps,
+                error=str(e),
             )
         finally:
             client.close()
@@ -315,14 +351,16 @@ class DeployService:
                 "allow_agent": False,
             }
             if credentials.private_key:
-                connect_kwargs["pkey"] = paramiko.RSAKey.from_private_key_file(credentials.private_key)
+                connect_kwargs["pkey"] = paramiko.RSAKey.from_private_key_file(
+                    credentials.private_key
+                )
             else:
                 connect_kwargs["password"] = credentials.password
 
             client.connect(**connect_kwargs)
 
             cmd = f"ls -lh {NGINX_BACKUP_DIR}/html_*.tar.gz 2>/dev/null"
-            if credentials.username != 'root':
+            if credentials.username != "root":
                 cmd = f"sudo {cmd}"
             stdin, stdout, stderr = client.exec_command(cmd)
             stdout.channel.recv_exit_status()
@@ -330,22 +368,22 @@ class DeployService:
 
             backups = []
             if output:
-                for line in output.split('\n'):
+                for line in output.split("\n"):
                     parts = line.split()
                     if len(parts) >= 9:
-                        filename = parts[-1].split('/')[-1]
+                        filename = parts[-1].split("/")[-1]
                         size = parts[4]
                         try:
-                            date_str = filename.replace('html_', '').replace('.tar.gz', '')
+                            date_str = filename.replace("html_", "").replace(
+                                ".tar.gz", ""
+                            )
                             dt = datetime.strptime(date_str, "%Y%m%d_%H%M%S")
                             created_at = dt.strftime("%Y-%m-%d %H:%M:%S")
                         except ValueError:
                             created_at = f"{parts[5]} {parts[6]} {parts[7]}"
-                        backups.append({
-                            "name": filename,
-                            "size": size,
-                            "created_at": created_at
-                        })
+                        backups.append(
+                            {"name": filename, "size": size, "created_at": created_at}
+                        )
 
             backups.sort(key=lambda x: x["name"], reverse=True)
             return backups
@@ -357,13 +395,23 @@ class DeployService:
             client.close()
 
     @staticmethod
-    async def rollback(resource: Resource, backup_name: str, deploy_type: str = "frontend", restart_keepalived: bool = False, restart_container: bool = True) -> DeployResult:
+    async def rollback(
+        resource: Resource,
+        backup_name: str,
+        deploy_type: str = "frontend",
+        restart_keepalived: bool = False,
+        restart_container: bool = True,
+    ) -> DeployResult:
         """Rollback to a specific backup"""
         server_name = resource.ip_address or resource.name
         steps: List[DeployStepLog] = []
 
         def step_log(step: str, status: str, message: str = ""):
-            steps.append(DeployStepLog(server=server_name, step=step, status=status, message=message))
+            steps.append(
+                DeployStepLog(
+                    server=server_name, step=step, status=status, message=message
+                )
+            )
 
         # Define paths based on deploy_type
         if deploy_type == "frontend":
@@ -378,15 +426,23 @@ class DeployService:
             restart_commands = [f"systemctl restart {deploy_type}"]
 
         # Validate backup_name to prevent injection
-        if not backup_name.startswith(f"{deploy_type}_") or not backup_name.endswith(".tar.gz"):
+        if not backup_name.startswith(f"{deploy_type}_") or not backup_name.endswith(
+            ".tar.gz"
+        ):
             return DeployResult(
-                server=server_name, resource_id=resource.id,
-                success=False, steps=steps, error="Invalid backup name"
+                server=server_name,
+                resource_id=resource.id,
+                success=False,
+                steps=steps,
+                error="Invalid backup name",
             )
         if "/" in backup_name or ".." in backup_name:
             return DeployResult(
-                server=server_name, resource_id=resource.id,
-                success=False, steps=steps, error="Invalid backup name"
+                server=server_name,
+                resource_id=resource.id,
+                success=False,
+                steps=steps,
+                error="Invalid backup name",
             )
 
         credentials = CredentialService.get_ssh_credentials(resource)
@@ -402,7 +458,9 @@ class DeployService:
                 "allow_agent": False,
             }
             if credentials.private_key:
-                connect_kwargs["pkey"] = paramiko.RSAKey.from_private_key_file(credentials.private_key)
+                connect_kwargs["pkey"] = paramiko.RSAKey.from_private_key_file(
+                    credentials.private_key
+                )
             else:
                 connect_kwargs["password"] = credentials.password
 
@@ -410,14 +468,16 @@ class DeployService:
             step_log("SSH连接", "success")
 
             def execute(cmd: str) -> str:
-                if credentials.username != 'root':
+                if credentials.username != "root":
                     cmd = f"sudo {cmd}"
                 stdin, stdout, stderr = client.exec_command(cmd)
                 exit_status = stdout.channel.recv_exit_status()
                 out = stdout.read().decode().strip()
                 err = stderr.read().decode().strip()
                 if exit_status != 0:
-                    raise RuntimeError(f"Command failed (exit {exit_status}): {err or out}")
+                    raise RuntimeError(
+                        f"Command failed (exit {exit_status}): {err or out}"
+                    )
                 return out
 
             # Check backup exists
@@ -425,8 +485,11 @@ class DeployService:
                 execute(f"test -f {backup_dir}/{backup_name}")
             except Exception:
                 return DeployResult(
-                    server=server_name, resource_id=resource.id,
-                    success=False, steps=steps, error=f"Backup {backup_name} not found"
+                    server=server_name,
+                    resource_id=resource.id,
+                    success=False,
+                    steps=steps,
+                    error=f"Backup {backup_name} not found",
                 )
 
             # Rollback
@@ -437,8 +500,11 @@ class DeployService:
             except Exception as e:
                 step_log("恢复备份", "failed", str(e))
                 return DeployResult(
-                    server=server_name, resource_id=resource.id,
-                    success=False, steps=steps, error="Rollback failed"
+                    server=server_name,
+                    resource_id=resource.id,
+                    success=False,
+                    steps=steps,
+                    error="Rollback failed",
                 )
 
             # Restart Container(s)
@@ -450,8 +516,11 @@ class DeployService:
                     except Exception as e:
                         step_log("重启容器", "failed", str(e))
                         return DeployResult(
-                            server=server_name, resource_id=resource.id,
-                            success=False, steps=steps, error="Container restart failed"
+                            server=server_name,
+                            resource_id=resource.id,
+                            success=False,
+                            steps=steps,
+                            error="Container restart failed",
                         )
             else:
                 step_log("重启容器", "success", "用户选择跳过重启")
@@ -463,12 +532,17 @@ class DeployService:
                     step_log("重启keepalived", "success")
                 except Exception as e:
                     step_log("重启keepalived", "failed", str(e))
-            return DeployResult(server=server_name, resource_id=resource.id, success=True, steps=steps)
+            return DeployResult(
+                server=server_name, resource_id=resource.id, success=True, steps=steps
+            )
 
         except Exception as e:
             return DeployResult(
-                server=server_name, resource_id=resource.id,
-                success=False, steps=steps, error=str(e)
+                server=server_name,
+                resource_id=resource.id,
+                success=False,
+                steps=steps,
+                error=str(e),
             )
         finally:
             client.close()

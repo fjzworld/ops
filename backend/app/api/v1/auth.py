@@ -5,7 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 from typing import Optional
 from app.core.database import get_async_db
-from app.core.security import verify_password, create_access_token, decode_access_token, get_password_hash, validate_password_length
+from app.core.security import (
+    verify_password,
+    create_access_token,
+    decode_access_token,
+    get_password_hash,
+    validate_password_length,
+)
 from app.core.rate_limit import limiter
 from app.core.token_blacklist import blacklist_token, is_token_blacklisted
 from app.core.config import settings
@@ -34,7 +40,7 @@ def _extract_token(request: Request, header_token: Optional[str] = None) -> str:
 async def get_current_user(
     request: Request,
     header_token: Optional[str] = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
 ) -> User:
     """Get current authenticated user from cookie or header token"""
     token = _extract_token(request, header_token)
@@ -62,7 +68,9 @@ async def get_current_user(
     return user
 
 
-async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+async def get_current_active_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
     """Get current active user"""
     if not current_user.is_active:
         raise BadRequestException(message="Inactive user")
@@ -71,15 +79,21 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
 
 @router.post("/register", response_model=UserInDB, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5 per minute")
-async def register(request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_async_db)):
+async def register(
+    request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_async_db)
+):
     """Register a new user - 速率限制：每分钟最多5次"""
     # Check if username exists
-    existing_user = await db.execute(select(User).filter(User.username == user_data.username))
+    existing_user = await db.execute(
+        select(User).filter(User.username == user_data.username)
+    )
     if existing_user.scalars().first():
         raise BadRequestException(message="Username already registered")
 
     # Check if email exists
-    existing_email = await db.execute(select(User).filter(User.email == user_data.email))
+    existing_email = await db.execute(
+        select(User).filter(User.email == user_data.email)
+    )
     if existing_email.scalars().first():
         raise BadRequestException(message="Email already registered")
 
@@ -96,7 +110,7 @@ async def register(request: Request, user_data: UserCreate, db: AsyncSession = D
         email=user_data.email,
         full_name=user_data.full_name,
         hashed_password=hashed_password,
-        role=user_data.role
+        role=user_data.role,
     )
 
     db.add(db_user)
@@ -112,7 +126,7 @@ async def login(
     request: Request,
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
 ):
     """Login and get access token - 速率限制：每分钟最多10次"""
     # Find user

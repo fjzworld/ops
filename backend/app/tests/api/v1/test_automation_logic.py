@@ -10,8 +10,11 @@ from app.tasks.automation import run_automation_task
 
 # Setup Testing DB
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 
 def override_get_db():
     try:
@@ -20,7 +23,9 @@ def override_get_db():
     finally:
         db.close()
 
+
 app.dependency_overrides[get_db] = override_get_db
+
 
 @pytest.fixture
 def db():
@@ -32,6 +37,7 @@ def db():
         db.close()
         Base.metadata.drop_all(bind=engine)
 
+
 @patch("paramiko.SSHClient")
 @patch("app.tasks.automation.CredentialService")
 def test_run_automation_task_logic(mock_credential_service, mock_ssh_client, db):
@@ -42,19 +48,19 @@ def test_run_automation_task_logic(mock_credential_service, mock_ssh_client, db)
     mock_creds.username = "root"
     mock_creds.password = "decrypted_password"
     mock_creds.private_key = None
-    
+
     mock_credential_service.get_ssh_credentials.return_value = mock_creds
 
     mock_ssh = MagicMock()
     mock_ssh_client.return_value = mock_ssh
-    
+
     mock_stdout = MagicMock()
     mock_stdout.read.return_value = b"Hello from remote"
     mock_stdout.channel.recv_exit_status.return_value = 0
-    
+
     mock_stderr = MagicMock()
     mock_stderr.read.return_value = b""
-    
+
     mock_ssh.exec_command.return_value = (MagicMock(), mock_stdout, mock_stderr)
 
     # 2. Setup Data
@@ -65,17 +71,17 @@ def test_run_automation_task_logic(mock_credential_service, mock_ssh_client, db)
         status=ResourceStatus.ACTIVE,
         ip_address="1.2.3.4",
         ssh_username="root",
-        ssh_password_enc="encrypted_pass"
+        ssh_password_enc="encrypted_pass",
     )
     db.add(resource)
-    
+
     task = Task(
         id=100,
         name="test-task",
         task_type="script",
         script_content="echo hello",
         target_resources=[1],
-        status=TaskStatus.PENDING
+        status=TaskStatus.PENDING,
     )
     db.add(task)
     db.commit()
@@ -91,12 +97,12 @@ def test_run_automation_task_logic(mock_credential_service, mock_ssh_client, db)
     assert "Hello from remote" in task.last_output
     assert task.execution_count == 1
     assert task.success_count == 1
-    
+
     mock_ssh.connect.assert_called_with(
         hostname="1.2.3.4",
         port=22,
         username="root",
         password="decrypted_password",
-        timeout=15
+        timeout=15,
     )
     mock_ssh.exec_command.assert_called_with("echo hello", timeout=300)

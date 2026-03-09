@@ -11,15 +11,16 @@ from app.services.credential_service import CredentialService
 
 logger = logging.getLogger(__name__)
 
+
 @celery_app.task(name="app.tasks.deployment.deploy_alloy_task")
 def deploy_alloy_task(
-    task_id: int, 
-    resource_id: int, 
+    task_id: int,
+    resource_id: int,
     backend_url: str,
     ssh_username: str = None,
     ssh_password: str = None,
     ssh_private_key: str = None,
-    ssh_port: int = None
+    ssh_port: int = None,
 ):
     logger.info(f"DEBUG: Entering deploy_alloy_task for task {task_id}")
     db = SessionLocal()
@@ -36,13 +37,12 @@ def deploy_alloy_task(
             task.last_error = error_msg
             db.commit()
             return
-            
+
         # Create execution record
         from app.models.task import TaskExecution
+
         execution = TaskExecution(
-            task_id=task.id,
-            status=TaskStatus.RUNNING,
-            start_time=datetime.now()
+            task_id=task.id, status=TaskStatus.RUNNING, start_time=datetime.now()
         )
         db.add(execution)
         db.commit()
@@ -59,7 +59,7 @@ def deploy_alloy_task(
                 port=ssh_port or resource.ssh_port or 22,
                 username=ssh_username or resource.ssh_username or "root",
                 password=ssh_password,
-                private_key=ssh_private_key
+                private_key=ssh_private_key,
             )
         else:
             try:
@@ -69,7 +69,7 @@ def deploy_alloy_task(
                 error_msg = f"Failed to load credentials: {str(e)}"
                 task.status = TaskStatus.FAILED
                 task.last_error = error_msg
-                
+
                 execution.status = TaskStatus.FAILED
                 execution.end_time = datetime.now()
                 execution.error = error_msg
@@ -80,35 +80,35 @@ def deploy_alloy_task(
             success, logs = deploy_alloy_agent(
                 credentials=credentials,
                 resource_id=resource.id,
-                backend_url=backend_url
+                backend_url=backend_url,
             )
 
             execution.end_time = datetime.now()
             execution.output = logs
-            
+
             if success:
                 task.status = TaskStatus.SUCCESS
                 task.last_output = logs
                 task.success_count += 1
-                
+
                 execution.status = TaskStatus.SUCCESS
             else:
                 task.status = TaskStatus.FAILED
                 task.last_error = "Deployment failed. Check execution logs."
                 task.last_output = logs
                 task.failure_count += 1
-                
+
                 execution.status = TaskStatus.FAILED
                 execution.error = "Deployment failed"
-                
+
         except Exception as e:
             logger.exception(f"Error during Alloy deployment: {e}")
             error_msg = str(e)
-            
+
             task.status = TaskStatus.FAILED
             task.last_error = error_msg
             task.failure_count += 1
-            
+
             execution.status = TaskStatus.FAILED
             execution.end_time = datetime.now()
             execution.error = error_msg

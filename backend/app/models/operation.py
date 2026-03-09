@@ -1,4 +1,14 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, JSON, DateTime, Enum as SQLEnum, ForeignKey
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Text,
+    Boolean,
+    JSON,
+    DateTime,
+    Enum as SQLEnum,
+    ForeignKey,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -7,12 +17,14 @@ import enum
 
 class OperationType(str, enum.Enum):
     """Operation type enumeration"""
+
     SCRIPT_EXEC = "script_exec"
     FRONTEND_DEPLOY = "frontend_deploy"
 
 
 class OperationStatus(str, enum.Enum):
     """Operation execution status"""
+
     PENDING = "PENDING"
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
@@ -22,6 +34,7 @@ class OperationStatus(str, enum.Enum):
 
 class Operation(Base):
     """Unified operations model — replaces Task"""
+
     __tablename__ = "operations"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -53,7 +66,9 @@ class Operation(Base):
     last_output = Column(Text)
     last_error = Column(Text)
 
-    executions = relationship("OperationExecution", back_populates="operation", cascade="all, delete-orphan")
+    executions = relationship(
+        "OperationExecution", back_populates="operation", cascade="all, delete-orphan"
+    )
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -66,11 +81,16 @@ class Operation(Base):
 
 class OperationExecution(Base):
     """Operation execution history — replaces TaskExecution"""
+
     __tablename__ = "operation_executions"
 
     id = Column(Integer, primary_key=True, index=True)
-    operation_id = Column(Integer, ForeignKey("operations.id"), nullable=False, index=True)
-    operation_type = Column(SQLEnum(OperationType), nullable=False)  # Redundant for fast filtering
+    operation_id = Column(
+        Integer, ForeignKey("operations.id"), nullable=False, index=True
+    )
+    operation_type = Column(
+        SQLEnum(OperationType), nullable=False
+    )  # Redundant for fast filtering
     status = Column(SQLEnum(OperationStatus), nullable=False)
     start_time = Column(DateTime(timezone=True), server_default=func.now())
     end_time = Column(DateTime(timezone=True))

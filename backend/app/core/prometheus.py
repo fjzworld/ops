@@ -1,44 +1,43 @@
 import httpx
 import logging
-from typing import List, Optional
+from typing import List
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+
 class PrometheusClient:
     """Client for interacting with Prometheus API"""
-    
+
     def __init__(self, base_url: str = ""):
         self.base_url = (base_url or settings.PROMETHEUS_URL).rstrip("/")
         self.query_url = f"{self.base_url}/api/v1/query"
         self.query_range_url = f"{self.base_url}/api/v1/query_range"
 
-    async def query_range(self, query: str, start: float, end: float, step: str = "60s") -> List[dict]:
-        params = {
-            "query": query,
-            "start": start,
-            "end": end,
-            "step": step
-        }
-        
+    async def query_range(
+        self, query: str, start: float, end: float, step: str = "60s"
+    ) -> List[dict]:
+        params = {"query": query, "start": start, "end": end, "step": step}
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(
-                    self.query_range_url,
-                    params=params
-                )
-                
+                response = await client.get(self.query_range_url, params=params)
+
                 if response.status_code != 200:
-                    logger.error(f"Prometheus query_range failed with status {response.status_code}: {response.text}")
+                    logger.error(
+                        f"Prometheus query_range failed with status {response.status_code}: {response.text}"
+                    )
                     return []
-                
+
                 data = response.json()
                 if data.get("status") != "success":
-                    logger.error(f"Prometheus API returned error: {data.get('error', 'Unknown error')}")
+                    logger.error(
+                        f"Prometheus API returned error: {data.get('error', 'Unknown error')}"
+                    )
                     return []
-                
+
                 return data.get("data", {}).get("result", [])
-                
+
         except httpx.RequestError as e:
             logger.error(f"Connection error to Prometheus at {self.base_url}: {e}")
             return []
@@ -58,18 +57,19 @@ class PrometheusClient:
         """
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(
-                    self.query_url,
-                    params={"query": query}
-                )
+                response = await client.get(self.query_url, params={"query": query})
 
                 if response.status_code != 200:
-                    logger.error(f"Prometheus query failed with status {response.status_code}: {response.text}")
+                    logger.error(
+                        f"Prometheus query failed with status {response.status_code}: {response.text}"
+                    )
                     return []
 
                 data = response.json()
                 if data.get("status") != "success":
-                    logger.error(f"Prometheus API returned error: {data.get('error', 'Unknown error')}")
+                    logger.error(
+                        f"Prometheus API returned error: {data.get('error', 'Unknown error')}"
+                    )
                     return []
 
                 return data.get("data", {}).get("result", [])
@@ -86,27 +86,28 @@ class PrometheusClient:
         Query Prometheus for active resources within the specified window.
         Uses the 'integrated-agent' job and 'up' metric.
         """
-        query = f'count by (resource_id) (count_over_time(node_load1[{window}]))'
-        
+        query = f"count by (resource_id) (count_over_time(node_load1[{window}]))"
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(
-                    self.query_url,
-                    params={"query": query}
-                )
-                
+                response = await client.get(self.query_url, params={"query": query})
+
                 if response.status_code != 200:
-                    logger.error(f"Prometheus query failed with status {response.status_code}: {response.text}")
+                    logger.error(
+                        f"Prometheus query failed with status {response.status_code}: {response.text}"
+                    )
                     return []
-                
+
                 data = response.json()
                 if data.get("status") != "success":
-                    logger.error(f"Prometheus API returned error: {data.get('error', 'Unknown error')}")
+                    logger.error(
+                        f"Prometheus API returned error: {data.get('error', 'Unknown error')}"
+                    )
                     return []
-                
+
                 results = data.get("data", {}).get("result", [])
                 resource_ids = []
-                
+
                 for item in results:
                     # Metric value is a list [timestamp, "value"]
                     # We check if value > 0
@@ -117,11 +118,13 @@ class PrometheusClient:
                             if resource_id_str:
                                 resource_ids.append(int(resource_id_str))
                     except (ValueError, IndexError, TypeError) as e:
-                        logger.warning(f"Failed to parse prometheus result: {item}. Error: {e}")
+                        logger.warning(
+                            f"Failed to parse prometheus result: {item}. Error: {e}"
+                        )
                         continue
-                
+
                 return resource_ids
-                
+
         except httpx.RequestError as e:
             logger.error(f"Connection error to Prometheus at {self.base_url}: {e}")
             return []

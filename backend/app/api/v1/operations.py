@@ -9,19 +9,36 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_async_db
 from app.models.user import User
-from app.models.operation import Operation, OperationType, OperationStatus, OperationExecution
+from app.models.operation import (
+    Operation,
+    OperationType,
+    OperationStatus,
+    OperationExecution,
+)
 from app.models.resource import Resource
 from app.api.v1.auth import get_current_active_user
 from app.schemas.operation import (
-    OperationCreate, OperationUpdate, OperationInDB,
-    OperationExecuteMessage, OperationExecutionInDB, DeployExecuteRequest
+    OperationCreate,
+    OperationUpdate,
+    OperationInDB,
+    OperationExecuteMessage,
+    OperationExecutionInDB,
+    DeployExecuteRequest,
 )
-from app.schemas.deploy import UploadResponse, BackupInfo, DeployResponse, DeployRollbackRequest
+from app.schemas.deploy import (
+    UploadResponse,
+    BackupInfo,
+    DeployResponse,
+    DeployRollbackRequest,
+)
 from app.tasks.automation import run_automation_task
 from app.services.scheduler import SchedulerService
 from app.services.deploy_service import DeployService
 from app.core.exceptions import (
-    NotFoundException, PermissionDeniedException, BadRequestException, InternalServerError
+    NotFoundException,
+    PermissionDeniedException,
+    BadRequestException,
+    InternalServerError,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,13 +49,14 @@ MAX_UPLOAD_SIZE = 2000 * 1024 * 1024  # 2000MB (2GB)
 
 # ========== Generic Operation CRUD ==========
 
+
 @router.get("", response_model=List[OperationInDB])
 async def list_operations(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     operation_type: Optional[OperationType] = None,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
 ):
     """List operations with optional type filter"""
     query = select(Operation).options(selectinload(Operation.executions))
@@ -53,11 +71,12 @@ async def list_operations(
 async def get_operation(
     operation_id: int,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
 ):
     """Get operation by ID with executions"""
     result = await db.execute(
-        select(Operation).filter(Operation.id == operation_id)
+        select(Operation)
+        .filter(Operation.id == operation_id)
         .options(selectinload(Operation.executions))
     )
     op = result.scalars().first()
@@ -70,7 +89,7 @@ async def get_operation(
 async def create_operation(
     op_in: OperationCreate,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
 ):
     """Create a new operation"""
     if current_user.role not in ["admin", "operator"]:
@@ -83,10 +102,7 @@ async def create_operation(
         except ValueError as e:
             raise BadRequestException(message=str(e))
 
-    operation = Operation(
-        **op_in.model_dump(),
-        created_by=current_user.username
-    )
+    operation = Operation(**op_in.model_dump(), created_by=current_user.username)
     db.add(operation)
     await db.commit()
     await db.refresh(operation)
@@ -96,7 +112,9 @@ async def create_operation(
         try:
             SchedulerService.sync_task(operation)
         except Exception as e:
-            raise InternalServerError(message=f"Operation created but failed to schedule: {str(e)}")
+            raise InternalServerError(
+                message=f"Operation created but failed to schedule: {str(e)}"
+            )
 
     return operation
 
@@ -106,7 +124,7 @@ async def update_operation(
     operation_id: int,
     op_in: OperationUpdate,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
 ):
     """Update an operation"""
     if current_user.role not in ["admin", "operator"]:
@@ -116,7 +134,10 @@ async def update_operation(
     if not operation:
         raise NotFoundException(message="Operation not found")
 
-    if op_in.schedule is not None and operation.operation_type == OperationType.SCRIPT_EXEC:
+    if (
+        op_in.schedule is not None
+        and operation.operation_type == OperationType.SCRIPT_EXEC
+    ):
         try:
             SchedulerService.validate_cron(op_in.schedule)
         except ValueError as e:
@@ -133,7 +154,9 @@ async def update_operation(
         try:
             SchedulerService.sync_task(operation)
         except Exception as e:
-            raise InternalServerError(message=f"Updated but failed to sync schedule: {str(e)}")
+            raise InternalServerError(
+                message=f"Updated but failed to sync schedule: {str(e)}"
+            )
 
     return operation
 
@@ -142,7 +165,7 @@ async def update_operation(
 async def delete_operation(
     operation_id: int,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
 ):
     """Delete an operation"""
     if current_user.role != "admin":
@@ -156,7 +179,9 @@ async def delete_operation(
         try:
             SchedulerService.delete_task(operation_id)
         except Exception as e:
-            raise InternalServerError(message=f"Failed to remove from scheduler: {str(e)}")
+            raise InternalServerError(
+                message=f"Failed to remove from scheduler: {str(e)}"
+            )
 
     await db.delete(operation)
     await db.commit()
@@ -165,11 +190,12 @@ async def delete_operation(
 
 # ========== Script Execution ==========
 
+
 @router.post("/{operation_id}/execute", response_model=OperationExecuteMessage)
 async def execute_operation(
     operation_id: int,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
 ):
     """Execute a script_exec operation manually"""
     if current_user.role not in ["admin", "operator"]:
@@ -180,7 +206,9 @@ async def execute_operation(
         raise NotFoundException(message="Operation not found")
 
     if operation.operation_type != OperationType.SCRIPT_EXEC:
-        raise BadRequestException(message="Only script_exec operations can be executed this way")
+        raise BadRequestException(
+            message="Only script_exec operations can be executed this way"
+        )
 
     operation.status = OperationStatus.RUNNING
     await db.commit()
@@ -190,7 +218,10 @@ async def execute_operation(
     if config.get("task_type") == "deploy_alloy":
         from app.tasks.deployment import deploy_alloy_task
         from app.core.config import settings
-        resource_id = operation.target_resources[0] if operation.target_resources else None
+
+        resource_id = (
+            operation.target_resources[0] if operation.target_resources else None
+        )
         if not resource_id:
             raise BadRequestException(message="Deployment task has no target resource")
         deploy_alloy_task.delay(operation.id, resource_id, settings.EXTERNAL_API_URL)
@@ -202,11 +233,12 @@ async def execute_operation(
 
 # ========== Execution History ==========
 
+
 @router.get("/{operation_id}/executions", response_model=List[OperationExecutionInDB])
 async def list_executions(
     operation_id: int,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
 ):
     """List execution history for an operation"""
     operation = await db.get(Operation, operation_id)
@@ -225,7 +257,7 @@ async def list_executions(
 async def get_execution_details(
     execution_id: int,
     current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
 ):
     """Get details of a specific execution"""
     execution = await db.get(OperationExecution, execution_id)
@@ -235,6 +267,7 @@ async def get_execution_details(
 
 
 # ========== Deploy Endpoints ==========
+
 
 @router.post("/deploy/upload", response_model=UploadResponse)
 async def upload_dist_package(
@@ -250,27 +283,36 @@ async def upload_dist_package(
         raise BadRequestException(message="No file provided")
 
     filename = file.filename.lower()
-    if not (filename.endswith('.zip') or filename.endswith('.tar.gz') or filename.endswith('.tgz')):
+    if not (
+        filename.endswith(".zip")
+        or filename.endswith(".tar.gz")
+        or filename.endswith(".tgz")
+    ):
         raise BadRequestException(message="Only .zip and .tar.gz files are supported")
 
     content = await file.read()
     if len(content) > MAX_UPLOAD_SIZE:
-        raise BadRequestException(message=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // 1024 // 1024}MB")
+        raise BadRequestException(
+            message=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // 1024 // 1024}MB"
+        )
 
     try:
         file_id, saved_path = DeployService.save_upload(content, file.filename)
     except ValueError as e:
         raise BadRequestException(message=str(e))
 
-    deploy_type = request.query_params.get('deploy_type', 'frontend')
+    deploy_type = request.query_params.get("deploy_type", "frontend")
     valid, message = DeployService.validate_package(saved_path, deploy_type)
     if not valid:
         DeployService.cleanup_upload(file_id)
         raise BadRequestException(message=message)
 
     return UploadResponse(
-        file_id=file_id, filename=file.filename, deploy_type=deploy_type,
-        size=len(content), valid=True,
+        file_id=file_id,
+        filename=file.filename,
+        deploy_type=deploy_type,
+        size=len(content),
+        valid=True,
     )
 
 
@@ -284,7 +326,9 @@ async def execute_deploy(
     if current_user.role != "admin":
         raise PermissionDeniedException(message="Only admin can deploy")
     if request.deploy_type == "frontend" and len(request.resource_ids) > 2:
-        raise BadRequestException(message="Frontend deployment supports maximum 2 servers")
+        raise BadRequestException(
+            message="Frontend deployment supports maximum 2 servers"
+        )
 
     file_path = DeployService.get_upload_path(request.file_id)
     if not file_path:
@@ -296,7 +340,9 @@ async def execute_deploy(
         if not resource:
             raise NotFoundException(message=f"Resource {rid} not found")
         if not resource.ip_address:
-            raise BadRequestException(message=f"Resource {resource.name} has no IP address")
+            raise BadRequestException(
+                message=f"Resource {resource.name} has no IP address"
+            )
         resources.append(resource)
 
     # Create Operation record for this deployment
@@ -324,7 +370,7 @@ async def execute_deploy(
             resources,
             deploy_type=request.deploy_type,
             restart_keepalived=request.restart_keepalived,
-            restart_container=request.restart_container
+            restart_container=request.restart_container,
         )
     except Exception as e:
         logger.error(f"Deployment failed: {e}")
@@ -338,7 +384,9 @@ async def execute_deploy(
 
     # Update operation status
     overall_success = all(r.success for r in results)
-    operation.status = OperationStatus.SUCCESS if overall_success else OperationStatus.FAILED
+    operation.status = (
+        OperationStatus.SUCCESS if overall_success else OperationStatus.FAILED
+    )
     if overall_success:
         operation.success_count += 1
     else:
@@ -405,5 +453,7 @@ async def rollback_deploy(
     if not resource:
         raise NotFoundException(message="Resource not found")
 
-    result = await DeployService.rollback(resource, request.backup_name, deploy_type=request.deploy_type)
+    result = await DeployService.rollback(
+        resource, request.backup_name, deploy_type=request.deploy_type
+    )
     return DeployResponse(success=result.success, results=[result])

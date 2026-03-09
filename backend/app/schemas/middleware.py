@@ -2,14 +2,16 @@ from typing import Optional, Literal
 from datetime import datetime
 from pydantic import BaseModel
 
+
 # Simple nested schema for resource association
 class ResourceBrief(BaseModel):
     id: int
     name: str
     ip_address: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
+
 
 class MiddlewareBase(BaseModel):
     name: str
@@ -20,8 +22,10 @@ class MiddlewareBase(BaseModel):
     service_name: Optional[str] = None
     log_path: Optional[str] = None
 
+
 class MiddlewareCreate(MiddlewareBase):
     password_plain: Optional[str] = None
+
 
 class MiddlewareUpdate(BaseModel):
     name: Optional[str] = None
@@ -34,11 +38,14 @@ class MiddlewareUpdate(BaseModel):
     log_path: Optional[str] = None
     status: Optional[str] = None
 
+
 class MiddlewareAction(BaseModel):
     action: Literal["start", "stop", "restart"]
 
+
 class MiddlewareVerify(BaseModel):
     """中间件验证请求"""
+
     resource_id: int
     type: str
     port: int
@@ -46,8 +53,10 @@ class MiddlewareVerify(BaseModel):
     password_plain: Optional[str] = None
     service_name: Optional[str] = None
 
+
 class MiddlewareVerifyResult(BaseModel):
     """中间件验证结果"""
+
     success: bool
     ssh_ok: bool = True  # SSH 连接状态
     port_reachable: bool
@@ -59,6 +68,7 @@ class MiddlewareVerifyResult(BaseModel):
     suggested_service_name: Optional[str] = None  # 自动检测到的服务名称
     message: str
     details: dict = {}
+
 
 class MiddlewareInDB(MiddlewareBase):
     id: int

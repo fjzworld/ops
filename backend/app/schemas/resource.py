@@ -6,6 +6,7 @@ from app.models.resource import ResourceType, ResourceStatus
 
 class ResourceBase(BaseModel):
     """Base resource schema"""
+
     name: str = Field(..., min_length=1, max_length=100)
     type: ResourceType
     ip_address: Optional[str] = None
@@ -22,13 +23,16 @@ class ResourceBase(BaseModel):
 
 class ResourceCreate(ResourceBase):
     """Schema for creating a resource"""
+
     # SSH credentials for auto-discovery and management
     ssh_port: int = Field(22, ge=1, le=65535)
     ssh_username: Optional[str] = "root"
     ssh_password: Optional[str] = None
     ssh_private_key: Optional[str] = None
-    backend_url: Optional[str] = Field(None, description="Backend URL for agent to connect back")
-    
+    backend_url: Optional[str] = Field(
+        None, description="Backend URL for agent to connect back"
+    )
+
     # Override base fields to be optional (auto-detected if not provided)
     cpu_cores: Optional[int] = None
     memory_gb: Optional[float] = None
@@ -38,6 +42,7 @@ class ResourceCreate(ResourceBase):
 
 class ResourceUpdate(BaseModel):
     """Schema for updating a resource"""
+
     name: Optional[str] = None
     status: Optional[ResourceStatus] = None
     ip_address: Optional[str] = None
@@ -54,6 +59,7 @@ class ResourceUpdate(BaseModel):
 
 class ResourceInDB(ResourceBase):
     """Schema for resource in database"""
+
     id: int
     status: ResourceStatus
     cpu_usage: Optional[float] = 0.0
@@ -67,13 +73,14 @@ class ResourceInDB(ResourceBase):
     has_credentials: bool = False
     ssh_port: int = 22
     ssh_username: str = "root"
-    
+
     class Config:
         from_attributes = True
 
 
 class DiskPartition(BaseModel):
     """Single disk partition info"""
+
     mountpoint: str
     device: str
     fstype: str
@@ -84,6 +91,7 @@ class DiskPartition(BaseModel):
 
 class ResourceMetrics(BaseModel):
     """Resource metrics update"""
+
     cpu_usage: float = Field(..., ge=0, le=100)
     memory_usage: float = Field(..., ge=0, le=100)
     disk_usage: float = Field(..., ge=0, le=100)
@@ -95,16 +103,20 @@ class ResourceMetrics(BaseModel):
 
 class ResourceProbeRequest(BaseModel):
     """Request to probe a server for auto-detection"""
+
     ip_address: str = Field(..., description="Server IP address")
     ssh_port: int = Field(22, ge=1, le=65535)
     ssh_username: str = Field(..., min_length=1)
     ssh_password: Optional[str] = None
     ssh_private_key: Optional[str] = None
-    backend_url: Optional[str] = Field(None, description="Custom backend URL for agent callbacks")
+    backend_url: Optional[str] = Field(
+        None, description="Custom backend URL for agent callbacks"
+    )
 
 
 class ResourceProbeResponse(BaseModel):
     """Response from server probe"""
+
     hostname: str
     cpu_cores: int
     memory_gb: float
@@ -116,7 +128,10 @@ class ResourceProbeResponse(BaseModel):
 
 class ResourceDeleteRequest(BaseModel):
     """Request to delete a resource with optional agent uninstall"""
-    uninstall_agent: bool = Field(True, description="Whether to uninstall agent from remote server")
+
+    uninstall_agent: bool = Field(
+        True, description="Whether to uninstall agent from remote server"
+    )
     ssh_port: int = Field(22, ge=1, le=65535)
     ssh_username: str = Field("root", min_length=1)
     ssh_password: Optional[str] = None
@@ -125,6 +140,7 @@ class ResourceDeleteRequest(BaseModel):
 
 class ResourceStats(BaseModel):
     """Resource statistics summary"""
+
     total: int
     active: int
     inactive: int
@@ -133,11 +149,13 @@ class ResourceStats(BaseModel):
 
 class MessageResponse(BaseModel):
     """Generic message response schema"""
+
     message: str
 
 
 class MetricResponse(BaseModel):
     """Resource metrics response"""
+
     resource_id: int
     metrics: List[Dict]
     processes: List[Dict]
@@ -145,6 +163,7 @@ class MetricResponse(BaseModel):
 
 class ResourceImportResult(BaseModel):
     """Result of bulk resource import"""
+
     total: int
     success: int
     failed: int
