@@ -6,6 +6,9 @@ class DeployExecuteRequest(BaseModel):
     """Request to execute frontend deployment"""
 
     file_id: str = Field(..., description="Uploaded file ID from upload endpoint")
+    deploy_type: str = Field(
+        default="frontend", description="Type of deployment to determine target path"
+    )
     resource_ids: List[int] = Field(
         ..., min_length=1, description="Target resource IDs from CMDB"
     )
@@ -16,9 +19,6 @@ class DeployExecuteRequest(BaseModel):
     restart_container: bool = Field(
         default=True,
         description="Whether to restart container after backend/algorithm deploy",
-    )
-    restart_container: bool = Field(
-        default=True, description="Whether to restart container after deploy"
     )
 
 

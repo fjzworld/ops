@@ -336,7 +336,7 @@ class DeployService:
             client.close()
 
     @staticmethod
-    async def get_backups(resource: Resource) -> List[dict]:
+    async def get_backups(resource: Resource, deploy_type: str = "frontend") -> List[dict]:
         """Get backup list from remote server"""
         credentials = CredentialService.get_ssh_credentials(resource)
         client = create_secure_client()
@@ -359,7 +359,14 @@ class DeployService:
 
             client.connect(**connect_kwargs)
 
-            cmd = f"ls -lh {NGINX_BACKUP_DIR}/html_*.tar.gz 2>/dev/null"
+            if deploy_type == "frontend":
+                backup_dir = NGINX_BACKUP_DIR
+                backup_prefix = "html"
+            else:
+                backup_dir = f"/opt/backup/{deploy_type}"
+                backup_prefix = deploy_type
+
+            cmd = f"ls -lh {backup_dir}/{backup_prefix}_*.tar.gz 2>/dev/null"
             if credentials.username != "root":
                 cmd = f"sudo {cmd}"
             stdin, stdout, stderr = client.exec_command(cmd)
@@ -374,7 +381,7 @@ class DeployService:
                         filename = parts[-1].split("/")[-1]
                         size = parts[4]
                         try:
-                            date_str = filename.replace("html_", "").replace(
+                            date_str = filename.replace(f"{backup_prefix}_", "").replace(
                                 ".tar.gz", ""
                             )
                             dt = datetime.strptime(date_str, "%Y%m%d_%H%M%S")
@@ -426,7 +433,8 @@ class DeployService:
             restart_commands = [f"systemctl restart {deploy_type}"]
 
         # Validate backup_name to prevent injection
-        if not backup_name.startswith(f"{deploy_type}_") or not backup_name.endswith(
+        expected_prefix = "html" if deploy_type == "frontend" else deploy_type
+        if not backup_name.startswith(f"{expected_prefix}_") or not backup_name.endswith(
             ".tar.gz"
         ):
             return DeployResult(

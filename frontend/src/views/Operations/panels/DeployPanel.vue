@@ -29,7 +29,7 @@
           <div class="upload-content">
             <el-icon class="upload-icon"><UploadFilled /></el-icon>
             <div class="upload-text">将 dist 压缩包拖到此处，或 <em>点击选择</em></div>
-            <div class="upload-hint">支持 .zip / .tar.gz，最大 200MB</div>
+            <div class="upload-hint">支持 .zip / .tar.gz，最大 2GB</div>
           </div>
         </el-upload>
         <div class="upload-actions" v-if="selectedFile">
@@ -348,8 +348,10 @@ const handleDeploy = async () => {
   try {
     const { data } = await operationsApi.executeDeploy({
       file_id: fileId.value,
+      deploy_type: deployType.value,
       resource_ids: selectedResourceIds.value,
-      restart_keepalived: restartKeepalived.value
+      restart_keepalived: restartKeepalived.value,
+      restart_container: restartContainer.value
     })
     deployResults.value = data.results
     if (data.success) {

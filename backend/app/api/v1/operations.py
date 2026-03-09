@@ -23,9 +23,9 @@ from app.schemas.operation import (
     OperationInDB,
     OperationExecuteMessage,
     OperationExecutionInDB,
-    DeployExecuteRequest,
 )
 from app.schemas.deploy import (
+    DeployExecuteRequest,
     UploadResponse,
     BackupInfo,
     DeployResponse,
@@ -313,6 +313,7 @@ async def upload_dist_package(
         deploy_type=deploy_type,
         size=len(content),
         valid=True,
+        message=message,
     )
 
 

@@ -20,7 +20,7 @@ const routes: RouteRecordRaw[] = [
     {
         path: '/unauthorized',
         name: 'Unauthorized',
-        component: () => import('@/views/Login.vue'), // 可以用专门的未授权页面
+        component: () => import('@/views/Unauthorized.vue'),
         meta: { requiresAuth: false, roles: [] }
     },
     {
@@ -149,14 +149,12 @@ router.beforeEach(async (to, _from, next) => {
     if (to.meta.requiresAuth && loggedIn) {
         // 如果用户未加载，先获取用户信息
         if (!authStore.user) {
-            try {
-                await authStore.fetchCurrentUser()
-            } catch (error) {
-                // 获取用户信息失败，可能是cookie过期
-                await authStore.logout()
-                next('/login')
-                return
-            }
+            await authStore.fetchCurrentUser()
+        }
+
+        if (!authStore.user) {
+            next('/login')
+            return
         }
 
         const userRole = authStore.user?.role as UserRole

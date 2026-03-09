@@ -88,9 +88,3 @@ class OperationExecuteMessage(BaseModel):
     operation_id: int
 
 
-class DeployExecuteRequest(BaseModel):
-    """Request to execute frontend deployment via operation"""
-
-    file_id: str = Field(..., description="Uploaded file ID")
-    resource_ids: List[int] = Field(..., min_length=1, max_length=2)
-    restart_keepalived: bool = False

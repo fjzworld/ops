@@ -4,6 +4,7 @@ import type { Operation, OperationExecution, OperationType } from '@/types/opera
 export interface UploadResponse {
     file_id: string
     filename: string
+    deploy_type: string
     size: number
     valid: boolean
     message: string
@@ -20,6 +21,14 @@ export interface DeployResult {
 export interface DeployResponse {
     success: boolean
     results: DeployResult[]
+}
+
+export interface ExecuteDeployParams {
+    file_id: string
+    deploy_type: string
+    resource_ids: number[]
+    restart_keepalived: boolean
+    restart_container: boolean
 }
 
 export interface BackupInfo {
@@ -71,7 +80,7 @@ export const operationsApi = {
             timeout: 120000,
         })
     },
-    executeDeploy(params: { file_id: string; deploy_type: string; resource_ids: number[]; restart_keepalived: boolean; restart_container: boolean }) {
+    executeDeploy(params: ExecuteDeployParams) {
         return api.post<DeployResponse>('/operations/deploy/execute', params)
     },
     getBackups(resourceId: number, deployType: string = 'frontend') {
