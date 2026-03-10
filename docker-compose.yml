@@ -141,13 +141,13 @@ services:
         max-file: "3"
 
   # ==============================================
-  # Celery Worker
+  # Celery Worker + Beat
   # ==============================================
   celery-worker:
     build:
       context: ./backend
       dockerfile: ../docker/backend.Dockerfile
-    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=4
+    command: celery -A app.tasks.celery_app worker -B --loglevel=info --concurrency=4
     volumes:
       - ./backend:/app
     env_file:
@@ -176,7 +176,6 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
-      replicas: 2
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -185,49 +184,6 @@ services:
         max-file: "3"
 
   # ==============================================
-  # Celery Beat (Scheduler)
-  # ==============================================
-  celery-beat:
-    build:
-      context: ./backend
-      dockerfile: ../docker/backend.Dockerfile
-    container_name: ops-celery-beat
-    command: celery -A app.tasks.celery_app beat --loglevel=info
-    volumes:
-      - ./backend:/app
-    env_file:
-      - .env
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      DEBUG: "false"
-      LOG_LEVEL: info
-      CELERY_LOG_LEVEL: info
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - backend
-      - database
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'
-          memory: 256M
-        reservations:
-          cpus: '0.1'
-          memory: 128M
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
   # ==============================================
   # Nginx (Frontend + Reverse Proxy)
   # ==============================================
@@ -245,7 +201,7 @@ services:
       - frontend
       - backend
     healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health" ]
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -378,3 +334,4 @@ volumes:
     driver: local
   loki_data:
     driver: local
+

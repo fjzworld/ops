@@ -19,7 +19,7 @@ graph TD
     subgraph "Core Services"
         Backend -->|Async| DB[(PostgreSQL)]
         Backend -->|Cache/Queue| Redis[(Redis)]
-        Backend -->|Task Execution| Celery[Celery Worker]
+        Backend -->|Task Execution + Scheduling| Celery[Celery Worker]
     end
     
     subgraph "Observability Space"
