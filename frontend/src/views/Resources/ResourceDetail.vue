@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="resource-detail-page">
     <!-- Top Header: Resource Profile -->
     <div class="glass-panel profile-header-card">
@@ -24,7 +24,7 @@
           </div>
           <div class="info-item">
             <span class="label">OS</span>
-            <span class="value">{{ resource?.os_type || 'Unknown' }}</span>
+            <span class="value">{{ resource?.os_type || '未知' }}</span>
           </div>
           <div class="info-item">
             <span class="label">Kernel</span>
@@ -67,7 +67,7 @@
       <div class="stats-grid">
         <div class="glass-panel stat-card" :class="getHealthClass(latestMetrics?.cpu_usage)">
           <div class="stat-header">
-            <span class="stat-title">CPU 使用率</span>
+            <span class="stat-title">CPU ???</span>
             <el-icon class="stat-icon"><Cpu /></el-icon>
           </div>
           <div class="stat-value">
@@ -182,9 +182,9 @@
     >
       <el-form :model="deployForm" label-width="100px" class="glass-form" style="margin-top: 10px">
         <el-alert
-          title="Grafana Alloy 部署"
+          title="Grafana Alloy 部署说明"
           type="warning"
-          description="将尝试连接服务器并安装/启动 Grafana Alloy。请确保 SSH 凭据正确。"
+          description="平台会通过当前主机的 SSH 连接自动安装并配置 Grafana Alloy。"
           show-icon
           :closable="false"
           style="margin-bottom: 20px"
@@ -219,7 +219,7 @@
         </el-form-item>
         
         <el-form-item v-else label="私钥路径">
-          <el-input v-model="deployForm.ssh_private_key" placeholder="/root/.ssh/id_rsa (服务端路径)" />
+          <el-input v-model="deployForm.ssh_private_key" placeholder="/root/.ssh/id_rsa (服务器路径)" />
         </el-form-item>
       </el-form>
 
@@ -277,21 +277,20 @@ const handleDeployClick = async () => {
   if (!resource.value) return
 
   const showDialog = () => {
-      if (!resource.value) return
-      deployForm.ssh_port = resource.value.ssh_port || 22
-      deployForm.ssh_username = resource.value.ssh_username || 'root'
-      deployForm.ssh_password = ''
-      deployForm.ssh_private_key = ''
-      authMethod.value = 'password'
-      showDeployDialog.value = true
+    if (!resource.value) return
+    deployForm.ssh_port = resource.value.ssh_port || 22
+    deployForm.ssh_username = resource.value.ssh_username || 'root'
+    deployForm.ssh_password = ''
+    deployForm.ssh_private_key = ''
+    authMethod.value = 'password'
+    showDeployDialog.value = true
   }
 
-  // 1. Check if active
   if (resource.value.status === 'ACTIVE') {
     try {
       await ElMessageBox.confirm(
-        '当前资源状态为"运行中"。若 Alloy 已正常运行，无需重新部署。强制重装可能会导致监控短暂中断。确定要继续吗？',
-        '确认重新部署',
+        '当前主机已经处于运行状态。重复部署 Alloy 可能会覆盖现有配置，是否继续？',
+        '部署确认',
         {
           confirmButtonText: '继续部署',
           cancelButtonText: '取消',
@@ -303,20 +302,18 @@ const handleDeployClick = async () => {
     }
   }
 
-  // 2. Check for saved credentials
   if (resource.value.has_credentials) {
     try {
       await ElMessageBox.confirm(
-        '检测到已保存的 SSH 凭证，是否直接使用该凭证重新部署 Alloy？',
-        '确认部署',
+        '检测到已保存的 SSH 凭据，是否直接使用已有凭据部署 Grafana Alloy？',
+        '凭据确认',
         {
           confirmButtonText: '直接部署',
-          cancelButtonText: '使用新凭证',
+          cancelButtonText: '手动填写',
           type: 'info',
           distinguishCancelAndClose: true
         }
       )
-      // Use saved credentials
       deployWithSavedCredentials()
     } catch (action) {
       if (action === 'cancel') {
@@ -332,29 +329,29 @@ const deployWithSavedCredentials = async () => {
   deploying.value = true
   try {
     const backendUrl = `${window.location.origin}/api/v1`
-    
-    if (!resource.value) return;
+
+    if (!resource.value) return
 
     const payload = {
-        ip_address: resource.value.ip_address || '', // Ensure string
-        ssh_port: resource.value.ssh_port || 22,
-        ssh_username: resource.value.ssh_username || 'root',
-        ssh_password: '', // Empty, backend will use saved
-        ssh_private_key: '',
-        backend_url: backendUrl
+      ip_address: resource.value.ip_address || '',
+      ssh_port: resource.value.ssh_port || 22,
+      ssh_username: resource.value.ssh_username || 'root',
+      ssh_password: '',
+      ssh_private_key: '',
+      backend_url: backendUrl
     }
     const res = await resourceApi.deployAlloy(resourceId, payload)
     const { task_id } = res.data
     ElNotification({
-      title: '部署任务已启动',
+      title: '部署任务已提交',
       message: h('div', null, [
-        h('p', null, `Grafana Alloy 部署任务已后台启动 (Task ID: ${task_id})`),
+        h('p', null, 'Grafana Alloy 部署任务已创建（任务 ID: ' + task_id + '）'),
         h(ElButton, {
           size: 'small',
           type: 'primary',
           style: { marginTop: '10px' },
           onClick: () => {
-            router.push('/automation/tasks')
+            router.push('/operations')
             ElNotification.closeAll()
           }
         }, '查看进度')
@@ -367,8 +364,8 @@ const deployWithSavedCredentials = async () => {
     console.error(e)
     let msg = '部署失败'
     if (e && typeof e === 'object' && 'response' in e) {
-        const error = e as { response: { data: { detail: string } } }
-        msg = error.response?.data?.detail || msg
+      const error = e as { response: { data: { detail: string } } }
+      msg = error.response?.data?.detail || msg
     }
     ElMessage.error(msg)
   } finally {
@@ -381,22 +378,22 @@ const handleDeploy = async () => {
   try {
     const backendUrl = `${window.location.origin}/api/v1`
     const payload = {
-        ip_address: resource.value?.ip_address,
-        ...deployForm,
-        backend_url: backendUrl
+      ip_address: resource.value?.ip_address,
+      ...deployForm,
+      backend_url: backendUrl
     }
     const res = await resourceApi.deployAlloy(resourceId, payload)
     const { task_id } = res.data
     ElNotification({
-      title: '部署任务已启动',
+      title: '部署任务已提交',
       message: h('div', null, [
-        h('p', null, `Grafana Alloy 部署任务已后台启动 (Task ID: ${task_id})`),
+        h('p', null, 'Grafana Alloy 部署任务已创建（任务 ID: ' + task_id + '）'),
         h(ElButton, {
           size: 'small',
           type: 'primary',
           style: { marginTop: '10px' },
           onClick: () => {
-            router.push('/automation/tasks')
+            router.push('/operations')
             ElNotification.closeAll()
           }
         }, '查看进度')
@@ -405,13 +402,13 @@ const handleDeploy = async () => {
       duration: 8000
     })
     showDeployDialog.value = false
-    setTimeout(loadResource, 2000) // Reload status after delay
+    setTimeout(loadResource, 2000)
   } catch (e: unknown) {
     console.error(e)
     let msg = '部署失败'
     if (e && typeof e === 'object' && 'response' in e) {
-        const error = e as { response: { data: { detail: string } } }
-        msg = error.response?.data?.detail || msg
+      const error = e as { response: { data: { detail: string } } }
+      msg = error.response?.data?.detail || msg
     }
     ElMessage.error(msg)
   } finally {
@@ -1009,3 +1006,8 @@ onUnmounted(() => {
   transition: width 0.3s ease;
 }
 </style>
+
+
+
+
+

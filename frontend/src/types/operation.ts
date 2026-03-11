@@ -1,6 +1,8 @@
-export enum OperationType {
+﻿export enum OperationType {
     SCRIPT_EXEC = 'script_exec',
     FRONTEND_DEPLOY = 'frontend_deploy',
+    BACKEND_DEPLOY = 'backend_deploy',
+    ALGORITHM_DEPLOY = 'algorithm_deploy',
 }
 
 export enum OperationStatus {

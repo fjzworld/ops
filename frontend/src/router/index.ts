@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+﻿import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
@@ -68,7 +68,6 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/Middleware/MiddlewareDetail.vue'),
                 meta: { roles: ['admin', 'operator', 'user', 'readonly'] }
             },
-
             {
                 path: 'alerts',
                 name: 'Alerts',
@@ -79,7 +78,7 @@ const routes: RouteRecordRaw[] = [
                 path: 'alerts/rules',
                 name: 'AlertRules',
                 component: () => import('@/views/Alerts/AlertRules.vue'),
-                meta: { roles: ['admin', 'operator'] } // 仅管理员和操作员可访问
+                meta: { roles: ['admin', 'operator'] }
             },
             {
                 path: 'operations',
@@ -99,7 +98,6 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/Logs/LogCenter.vue'),
                 meta: { title: '日志中心', roles: ['admin', 'operator', 'user', 'readonly'] }
             },
-            // deploy route removed — merged into /operations
             {
                 path: 'monitoring',
                 name: 'Monitoring',
@@ -111,7 +109,7 @@ const routes: RouteRecordRaw[] = [
     {
         path: '/:catchAll(.*)*',
         name: 'NotFound',
-        component: () => import('@/views/Login.vue'),
+        component: () => import('@/views/NotFound.vue'),
         meta: { requiresAuth: false, roles: [] }
     }
 ]
@@ -121,33 +119,27 @@ const router = createRouter({
     routes
 })
 
-// 检查用户是否有权限访问路由
 function hasPermission(userRole: UserRole | undefined, allowedRoles: UserRole[]): boolean {
     if (!allowedRoles || allowedRoles.length === 0) return true
     if (!userRole) return false
     return allowedRoles.includes(userRole)
 }
 
-// Navigation guard with role-based access control
 router.beforeEach(async (to, _from, next) => {
     const loggedIn = localStorage.getItem('logged_in')
     const authStore = useAuthStore()
 
-    // 如果需要认证但没有登录标记，跳转到登录页
     if (to.meta.requiresAuth && !loggedIn) {
         next('/login')
         return
     }
 
-    // 如果已登录且访问登录页，跳转到dashboard
     if (to.path === '/login' && loggedIn) {
         next('/dashboard')
         return
     }
 
-    // 如果需要认证，检查用户角色权限
     if (to.meta.requiresAuth && loggedIn) {
-        // 如果用户未加载，先获取用户信息
         if (!authStore.user) {
             await authStore.fetchCurrentUser()
         }
@@ -157,10 +149,9 @@ router.beforeEach(async (to, _from, next) => {
             return
         }
 
-        const userRole = authStore.user?.role as UserRole
-        const allowedRoles = to.meta.roles as UserRole[] || ['admin', 'operator', 'user', 'readonly']
+        const userRole = authStore.user.role as UserRole
+        const allowedRoles = (to.meta.roles as UserRole[]) || ['admin', 'operator', 'user', 'readonly']
 
-        // 检查角色权限
         if (!hasPermission(userRole, allowedRoles)) {
             ElMessage.error('权限不足，无法访问该页面')
             next('/unauthorized')

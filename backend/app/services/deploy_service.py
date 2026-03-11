@@ -1,9 +1,10 @@
-import uuid
+﻿import uuid
 import asyncio
 import logging
 import zipfile
 import tarfile
 import tempfile
+import shutil
 from pathlib import Path
 from typing import List, Tuple, Optional
 from datetime import datetime
@@ -31,7 +32,7 @@ NGINX_CONTAINER_NAME = "start_nginx"
 class DeployService:
     @staticmethod
     def save_upload(file_content: bytes, filename: str) -> Tuple[str, str]:
-        """Save uploaded file, return (file_id, saved_path)"""
+        """Save uploaded file content, return (file_id, saved_path)."""
         file_id = uuid.uuid4().hex[:12]
         if filename.endswith(".tar.gz") or filename.endswith(".tgz"):
             ext = ".tar.gz"
@@ -44,6 +45,20 @@ class DeployService:
         save_path.write_bytes(file_content)
         return file_id, str(save_path)
 
+    @staticmethod
+    def save_upload_from_path(source_path: str, filename: str) -> Tuple[str, str]:
+        """Move a streamed upload into the managed upload directory."""
+        file_id = uuid.uuid4().hex[:12]
+        if filename.endswith(".tar.gz") or filename.endswith(".tgz"):
+            ext = ".tar.gz"
+        elif filename.endswith(".zip"):
+            ext = ".zip"
+        else:
+            raise ValueError("Only .zip and .tar.gz files are supported")
+
+        save_path = UPLOAD_DIR / f"{file_id}{ext}"
+        shutil.move(source_path, save_path)
+        return file_id, str(save_path)
     @staticmethod
     def validate_package(
         file_path: str, deploy_type: str = "frontend"
@@ -180,7 +195,7 @@ class DeployService:
                 connect_kwargs["password"] = credentials.password
 
             client.connect(**connect_kwargs)
-            step_log("SSH连接", "success")
+            step_log("SSH杩炴帴", "success")
 
             def execute(cmd: str) -> str:
                 if credentials.username != "root":
@@ -205,9 +220,9 @@ class DeployService:
                 execute(
                     f"tar -czf {backup_dir}/{backup_name} -C {target_parent} {target_folder}/"
                 )
-                step_log("备份当前代码", "success", backup_name)
+                step_log("澶囦唤褰撳墠浠ｇ爜", "success", backup_name)
             except Exception as e:
-                step_log("备份当前代码", "failed", str(e))
+                step_log("澶囦唤褰撳墠浠ｇ爜", "failed", str(e))
                 # Allow continuing if the target directory doesn't exist yet (first deploy)
 
             # 3. Clean old backups (older than 3 days)
@@ -215,18 +230,18 @@ class DeployService:
                 execute(
                     f"find {backup_dir} -name '{backup_prefix}_*.tar.gz' -mtime +3 -delete"
                 )
-                step_log("清理旧备份", "success")
+                step_log("?????", "success")
             except Exception:
-                step_log("清理旧备份", "success", "No old backups to clean")
+                step_log("?????", "success", "?????????")
 
             # 4. Upload new package
             remote_tmp = f"/tmp/deploy_{uuid.uuid4().hex[:8]}"
             try:
                 with client.open_sftp() as sftp:
                     sftp.put(file_path, f"{remote_tmp}.pkg")
-                step_log("上传代码包", "success")
+                step_log("?????", "success")
             except Exception as e:
-                step_log("上传代码包", "failed", str(e))
+                step_log("?????", "failed", str(e))
                 return DeployResult(
                     server=server_name,
                     resource_id=resource.id,
@@ -277,15 +292,15 @@ class DeployService:
                         execute(f"cp -a {extract_dir}/* {target_dir}/")
 
                 execute(f"rm -rf {extract_dir} {remote_tmp}.pkg")
-                step_log("解压并替换代码", "success")
+                step_log("???????", "success")
             except Exception as e:
-                step_log("解压并替换代码", "failed", str(e))
+                step_log("???????", "failed", str(e))
                 try:
                     execute(f"rm -rf {target_dir}/*")
                     execute(f"tar -xzf {backup_dir}/{backup_name} -C {target_parent}")
-                    step_log("自动回滚", "success", f"已回滚到 {backup_name}")
+                    step_log("鑷姩鍥炴粴", "success", f"宸插洖婊氬埌 {backup_name}")
                 except Exception:
-                    step_log("自动回滚", "failed", "回滚也失败了，请手动处理")
+                    step_log("鑷姩鍥炴粴", "failed", "鍥炴粴涔熷け璐ヤ簡锛岃鎵嬪姩澶勭悊")
                 return DeployResult(
                     server=server_name,
                     resource_id=resource.id,
@@ -299,9 +314,9 @@ class DeployService:
                 for cmd in restart_commands:
                     try:
                         execute(cmd)
-                        step_log("重启容器", "success", cmd)
+                        step_log("閲嶅惎瀹瑰櫒", "success", cmd)
                     except Exception as e:
-                        step_log("重启容器", "failed", str(e))
+                        step_log("閲嶅惎瀹瑰櫒", "failed", str(e))
                         return DeployResult(
                             server=server_name,
                             resource_id=resource.id,
@@ -310,21 +325,21 @@ class DeployService:
                             error="Container restart failed",
                         )
             else:
-                step_log("重启容器", "success", "用户选择跳过重启")
+                step_log("閲嶅惎瀹瑰櫒", "success", "鐢ㄦ埛閫夋嫨璺宠繃閲嶅惎")
 
             # 7. Restart keepalived (only if frontend HA)
             if restart_keepalived and deploy_type == "frontend":
                 try:
                     execute("systemctl restart keepalived")
-                    step_log("重启keepalived", "success")
+                    step_log("閲嶅惎keepalived", "success")
                 except Exception as e:
-                    step_log("重启keepalived", "failed", str(e))
+                    step_log("閲嶅惎keepalived", "failed", str(e))
             return DeployResult(
                 server=server_name, resource_id=resource.id, success=True, steps=steps
             )
 
         except Exception as e:
-            step_log("部署异常", "failed", str(e))
+            step_log("閮ㄧ讲寮傚父", "failed", str(e))
             return DeployResult(
                 server=server_name,
                 resource_id=resource.id,
@@ -473,7 +488,7 @@ class DeployService:
                 connect_kwargs["password"] = credentials.password
 
             client.connect(**connect_kwargs)
-            step_log("SSH连接", "success")
+            step_log("SSH杩炴帴", "success")
 
             def execute(cmd: str) -> str:
                 if credentials.username != "root":
@@ -504,9 +519,9 @@ class DeployService:
             try:
                 execute(f"rm -rf {target_dir}/*")
                 execute(f"tar -xzf {backup_dir}/{backup_name} -C {target_parent}")
-                step_log("恢复备份", "success", backup_name)
+                step_log("鎭㈠澶囦唤", "success", backup_name)
             except Exception as e:
-                step_log("恢复备份", "failed", str(e))
+                step_log("鎭㈠澶囦唤", "failed", str(e))
                 return DeployResult(
                     server=server_name,
                     resource_id=resource.id,
@@ -520,9 +535,9 @@ class DeployService:
                 for cmd in restart_commands:
                     try:
                         execute(cmd)
-                        step_log("重启容器", "success", cmd)
+                        step_log("閲嶅惎瀹瑰櫒", "success", cmd)
                     except Exception as e:
-                        step_log("重启容器", "failed", str(e))
+                        step_log("閲嶅惎瀹瑰櫒", "failed", str(e))
                         return DeployResult(
                             server=server_name,
                             resource_id=resource.id,
@@ -531,15 +546,15 @@ class DeployService:
                             error="Container restart failed",
                         )
             else:
-                step_log("重启容器", "success", "用户选择跳过重启")
+                step_log("閲嶅惎瀹瑰櫒", "success", "鐢ㄦ埛閫夋嫨璺宠繃閲嶅惎")
 
             # Restart keepalived
             if restart_keepalived and deploy_type == "frontend":
                 try:
                     execute("systemctl restart keepalived")
-                    step_log("重启keepalived", "success")
+                    step_log("閲嶅惎keepalived", "success")
                 except Exception as e:
-                    step_log("重启keepalived", "failed", str(e))
+                    step_log("閲嶅惎keepalived", "failed", str(e))
             return DeployResult(
                 server=server_name, resource_id=resource.id, success=True, steps=steps
             )
@@ -554,3 +569,6 @@ class DeployService:
             )
         finally:
             client.close()
+
+
+

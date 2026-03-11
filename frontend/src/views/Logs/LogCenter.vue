@@ -1,23 +1,20 @@
-<template>
+﻿<template>
   <div class="log-center page-container">
     <div class="glass-panel">
-      <!-- Header -->
       <div class="panel-header">
         <div class="header-left">
           <h2 class="panel-title">日志中心</h2>
           <span class="panel-subtitle">集中式日志聚合与检索分析</span>
         </div>
         <div class="header-right" style="display: flex; gap: 12px;">
-          <el-button @click="router.push('/automation/tasks')" class="glass-button">
+          <el-button @click="router.push('/operations')" class="glass-button">
             <el-icon><List /></el-icon>
             任务历史
           </el-button>
         </div>
       </div>
 
-      <!-- Filters -->
       <div class="filter-bar">
-        <!-- Simple Mode -->
         <template v-if="!advancedMode">
           <el-select
             v-model="filterForm.host"
@@ -41,7 +38,7 @@
 
           <el-input
             v-model="filterForm.keyword"
-            placeholder="关键词过滤"
+            placeholder="关键字过滤"
             class="glass-input keyword-input"
             @keyup.enter="handleSearch"
             clearable
@@ -52,7 +49,6 @@
           </el-input>
         </template>
 
-        <!-- Advanced Mode -->
         <el-input
           v-else
           v-model="queryParams.query"
@@ -69,9 +65,9 @@
         <el-date-picker
           v-model="dateRange"
           type="datetimerange"
-          range-separator="—"
-          start-placeholder="开始"
-          end-placeholder="结束"
+          range-separator="至"
+          start-placeholder="开始时间"
+          end-placeholder="结束时间"
           :shortcuts="shortcuts"
           class="glass-input"
           @change="handleDateChange"
@@ -95,18 +91,17 @@
           @click="advancedMode = !advancedMode"
           class="mode-toggle"
         >
-          {{ advancedMode ? '简单模式' : '高级模式' }}
+          {{ advancedMode ? '切换到简单模式' : '切换到高级模式' }}
         </el-button>
       </div>
 
-      <!-- Stats bar -->
-      <div class="stats-bar" v-if="logs.length > 0 || loading">
+      <div v-if="logs.length > 0 || loading" class="stats-bar">
         <div class="stats-left">
           <span class="stats-badge">
             <span class="stats-dot"></span>
-            {{ logs.length }} 条日志
+            共 {{ logs.length }} 条日志
           </span>
-          <span class="stats-meta" v-if="queryDuration">
+          <span v-if="queryDuration !== null" class="stats-meta">
             查询耗时 {{ queryDuration }}ms
           </span>
         </div>
@@ -120,12 +115,11 @@
         </div>
       </div>
 
-      <!-- Log Viewer -->
       <div class="log-viewer" v-loading="loading" element-loading-background="rgba(0,0,0,0.4)">
         <div v-if="!loading && logs.length === 0" class="empty-state">
           <el-icon class="empty-icon"><Document /></el-icon>
           <p class="empty-title">暂无日志数据</p>
-          <p class="empty-desc">请输入 LogQL 查询语句并点击查询</p>
+          <p class="empty-desc">请输入查询条件后执行检索</p>
         </div>
 
         <recycle-scroller
@@ -155,13 +149,12 @@ import { Search, Document, Top, Bottom, List } from '@element-plus/icons-vue'
 import { RecycleScroller } from 'vue-virtual-scroller'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
-import { logApi, type LogEntry, type LogQueryParams } from '../../api/logs'
+import { logApi, type LogEntry, type LogQueryParams } from '@/api/logs'
 
 interface ScrolledLogEntry extends LogEntry {
   id: number
 }
 
-// State
 const router = useRouter()
 const loading = ref(false)
 const logs = ref<ScrolledLogEntry[]>([])
@@ -175,20 +168,19 @@ const hostOptions = ref<string[]>([])
 const filenameOptions = ref<string[]>([])
 
 const filterForm = reactive({
-  host: '' as string,
-  filename: '' as string,
-  keyword: '' as string
+  host: '',
+  filename: '',
+  keyword: ''
 })
 
-const queryParams = reactive({
+const queryParams = reactive<LogQueryParams>({
   query: '{job="varlogs"}',
   limit: 1000
 })
 
-// Date shortcuts
 const shortcuts = [
   {
-    text: '最近15分钟',
+    text: '最近 15 分钟',
     value: () => {
       const end = new Date()
       const start = new Date()
@@ -197,7 +189,7 @@ const shortcuts = [
     },
   },
   {
-    text: '最近1小时',
+    text: '最近 1 小时',
     value: () => {
       const end = new Date()
       const start = new Date()
@@ -206,7 +198,7 @@ const shortcuts = [
     },
   },
   {
-    text: '最近6小时',
+    text: '最近 6 小时',
     value: () => {
       const end = new Date()
       const start = new Date()
@@ -215,23 +207,20 @@ const shortcuts = [
     },
   },
   {
-    text: '最近24小时',
+    text: '最近 24 小时',
     value: () => {
       const end = new Date()
       const start = new Date()
-      start.setTime(start.getTime() - 3600 * 1000 * 24)
+      start.setTime(start.getTime() - 24 * 3600 * 1000)
       return [start, end]
     },
   },
 ]
 
-// Methods
 const formatTime = (timestamp: string | number) => {
   const ts = String(timestamp)
   if (/^\d+$/.test(ts)) {
-    // Loki timestamps are in nanoseconds (19 digits)
-    // Convert to milliseconds (13 digits) for dayjs
-    const ms = parseInt(ts.substring(0, 13))
+    const ms = Number(ts.slice(0, 13))
     return dayjs(ms).format('MM-DD HH:mm:ss.SSS')
   }
   return dayjs(timestamp).format('MM-DD HH:mm:ss.SSS')
@@ -246,10 +235,9 @@ const getLogLevelClass = (line: string) => {
 }
 
 const handleDateChange = (_val: [Date, Date]) => {
-  // Ready for search
+  void _val
 }
 
-// Load label values from Loki
 const loadLabelValues = async () => {
   labelLoading.value = true
   try {
@@ -259,14 +247,13 @@ const loadLabelValues = async () => {
     ])
     hostOptions.value = hostRes.data?.data || []
     filenameOptions.value = filenameRes.data?.data || []
-  } catch (e) {
-    console.error('Failed to load label values:', e)
+  } catch (error) {
+    console.error('Failed to load label values:', error)
   } finally {
     labelLoading.value = false
   }
 }
 
-// Build LogQL query from simple filter form
 const buildQueryFromFilters = () => {
   const matchers: string[] = ['job="varlogs"']
   if (filterForm.host) matchers.push(`host="${filterForm.host}"`)
@@ -282,11 +269,12 @@ const scrollToTop = () => {
 
 const scrollToBottom = () => {
   const el = scrollerRef.value?.$el
-  if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  if (el) {
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }
 }
 
 const handleSearch = async () => {
-  // Build query based on mode
   if (!advancedMode.value) {
     queryParams.query = buildQueryFromFilters()
   }
@@ -298,12 +286,12 @@ const handleSearch = async () => {
 
   loading.value = true
   queryDuration.value = null
-  const startTime = Date.now()
+  const startedAt = Date.now()
 
   try {
     const params: LogQueryParams = {
       query: queryParams.query,
-      limit: queryParams.limit
+      limit: queryParams.limit,
     }
 
     if (dateRange.value) {
@@ -312,43 +300,32 @@ const handleSearch = async () => {
     }
 
     const res = await logApi.queryLogs(params)
+    const result = res.data?.data?.result || []
+    const collected: ScrolledLogEntry[] = []
 
-    if (res.data && res.data.data && res.data.data.result) {
-      const streams = res.data.data.result
-      const allLogs: LogEntry[] = []
-
-      streams.forEach((stream) => {
-        const labels = stream.stream || stream.metric || {}
-        if (stream.values) {
-          stream.values.forEach((value: [string, string]) => {
-            allLogs.push({
-              timestamp: value[0],
-              line: value[1],
-              labels: labels
-            })
-          })
-        }
+    result.forEach((stream) => {
+      const labels = stream.stream || stream.metric || {}
+      stream.values?.forEach((value, index) => {
+        collected.push({
+          id: collected.length + index,
+          timestamp: value[0],
+          line: value[1],
+          labels,
+        })
       })
+    })
 
-      allLogs.sort((a, b) => {
-        if (a.timestamp > b.timestamp) return -1
-        if (a.timestamp < b.timestamp) return 1
-        return 0
-      })
+    collected.sort((a, b) => {
+      if (a.timestamp > b.timestamp) return -1
+      if (a.timestamp < b.timestamp) return 1
+      return 0
+    })
 
-      for (let i = 0; i < allLogs.length; i++) {
-        allLogs[i].id = i
-      }
-
-      logs.value = allLogs as ScrolledLogEntry[]
-    } else {
-      logs.value = []
-    }
-
-    queryDuration.value = Date.now() - startTime
+    logs.value = collected.map((item, index) => ({ ...item, id: index }))
+    queryDuration.value = Date.now() - startedAt
   } catch (error) {
     console.error('Failed to query logs:', error)
-    ElMessage.error('查询日志失败，请检查 LogQL 语法或服务状态')
+    ElMessage.error('查询日志失败，请检查 LogQL 语法或日志服务状态')
   } finally {
     loading.value = false
   }
@@ -401,17 +378,16 @@ onMounted(() => {
   margin: 0;
   font-size: 24px;
   font-weight: 600;
-  color: #F8FAFC;
+  color: #f8fafc;
   letter-spacing: -0.5px;
 }
 
 .panel-subtitle {
   font-size: 13px;
-  color: #94A3B8;
+  color: #94a3b8;
   margin-top: 4px;
 }
 
-/* Filter bar */
 .filter-bar {
   display: flex;
   gap: 12px;
@@ -443,7 +419,6 @@ onMounted(() => {
   width: 120px;
 }
 
-/* Stats bar */
 .stats-bar {
   display: flex;
   justify-content: space-between;
@@ -492,11 +467,11 @@ onMounted(() => {
   color: #64748b !important;
   font-size: 12px;
 }
+
 .stats-action:hover {
   color: #38bdf8 !important;
 }
 
-/* Log viewer */
 .log-viewer {
   flex: 1;
   min-height: 0;
@@ -560,7 +535,6 @@ onMounted(() => {
   flex: 1;
 }
 
-/* Log level colors */
 .level-error {
   color: #f87171;
 }
@@ -573,7 +547,6 @@ onMounted(() => {
   color: #64748b;
 }
 
-/* Empty state */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -601,15 +574,6 @@ onMounted(() => {
   margin: 0;
 }
 
-/* Dialog */
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
-}
-
-/* Element overrides for dark theme */
 :deep(.el-input__wrapper),
 :deep(.el-textarea__inner) {
   background: rgba(0, 0, 0, 0.2) !important;

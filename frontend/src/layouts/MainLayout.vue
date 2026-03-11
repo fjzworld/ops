@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <el-container class="main-layout">
     <el-aside width="220px" class="sidebar">
       <div class="logo">
@@ -97,9 +97,9 @@ const pageTitle = computed(() => {
   return titles[route.path] || '运维平台'
 })
 
-const handleCommand = (command: string) => {
+const handleCommand = async (command: string) => {
   if (command === 'logout') {
-    authStore.logout()
+    await authStore.logout()
     router.push('/login')
   }
 }
@@ -135,7 +135,6 @@ const handleCommand = (command: string) => {
   letter-spacing: 0.5px;
 }
 
-/* Menu Customization */
 .custom-menu {
   border-right: none;
   background-color: transparent;
@@ -161,7 +160,7 @@ const handleCommand = (command: string) => {
 }
 
 .header {
-  background-color: rgba(2, 6, 23, 0.8); /* Semi-transparent bg-app */
+  background-color: rgba(2, 6, 23, 0.8);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border-color);
   padding: 0 24px;
@@ -203,7 +202,6 @@ const handleCommand = (command: string) => {
   overflow-y: auto;
 }
 
-/* Page Transition */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;

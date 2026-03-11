@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="operation-history page-container">
     <div class="glass-panel">
       <div class="panel-header">
@@ -7,7 +7,7 @@
             <el-breadcrumb-item :to="{ path: '/operations' }">运维中心</el-breadcrumb-item>
             <el-breadcrumb-item>执行历史</el-breadcrumb-item>
           </el-breadcrumb>
-          <h2 class="panel-title" style="margin-top: 10px">执行历史: {{ operationName }}</h2>
+          <h2 class="panel-title" style="margin-top: 10px">执行历史：{{ operationName }}</h2>
         </div>
       </div>
 
@@ -53,7 +53,6 @@
       </el-table>
     </div>
 
-    <!-- Log Viewer Dialog -->
     <el-dialog
       v-model="logVisible"
       title="执行日志"
@@ -66,7 +65,6 @@
       </div>
     </el-dialog>
 
-    <!-- Steps Viewer Dialog (for deploy-type executions) -->
     <el-dialog
       v-model="stepsVisible"
       title="部署步骤详情"
@@ -77,11 +75,11 @@
       <div class="steps-container">
         <div v-for="(step, idx) in selectedSteps" :key="idx" class="step-item">
           <span class="step-status-icon">
-            {{ step.status === 'success' ? '✅' : step.status === 'failed' ? '❌' : '⏳' }}
+            {{ step.status === 'success' ? '✓' : step.status === 'failed' ? '✗' : '…' }}
           </span>
           <span class="step-server">{{ step.server }}</span>
           <span class="step-label">{{ step.step }}</span>
-          <span class="step-message" v-if="step.message">— {{ step.message }}</span>
+          <span class="step-message" v-if="step.message">- {{ step.message }}</span>
         </div>
         <div v-if="selectedSteps.length === 0" class="empty-hint">无步骤记录</div>
       </div>
@@ -107,16 +105,23 @@ const selectedLog = ref('')
 const stepsVisible = ref(false)
 const selectedSteps = ref<DeployStepLog[]>([])
 
-const formatTime = (time: string) => {
-  return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
+const formatTime = (time?: string) => {
+  return time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : '-'
 }
 
 const getStatusType = (status: string) => {
   switch (status) {
-    case 'success': case 'SUCCESS': return 'success'
-    case 'failed': case 'FAILED': return 'danger'
-    case 'running': case 'RUNNING': return 'primary'
-    default: return 'info'
+    case 'success':
+    case 'SUCCESS':
+      return 'success'
+    case 'failed':
+    case 'FAILED':
+      return 'danger'
+    case 'running':
+    case 'RUNNING':
+      return 'primary'
+    default:
+      return 'info'
   }
 }
 
@@ -198,7 +203,6 @@ onMounted(() => {
   word-break: break-all;
 }
 
-/* Steps viewer */
 .steps-container {
   background: #0f172a;
   border-radius: 8px;

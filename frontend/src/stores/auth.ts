@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+﻿import { defineStore, getActivePinia } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
 import type { LoginData, User } from '@/types/user'
@@ -53,3 +53,13 @@ export const useAuthStore = defineStore('auth', () => {
         isAuthenticated
     }
 })
+
+export const clearAuthState = () => {
+    const pinia = getActivePinia()
+    if (pinia) {
+        const store = useAuthStore(pinia)
+        store.user = null
+        store.loggedIn = false
+    }
+    localStorage.removeItem('logged_in')
+}

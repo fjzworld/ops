@@ -1,9 +1,9 @@
-import axios from 'axios'
+﻿import axios from 'axios'
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
+import router from '@/router'
+import { clearAuthState } from '@/stores/auth'
 
-// Use relative path - Nginx will handle routing to backend
-// Always use relative path to leverage Vite proxy (dev) or Nginx (prod)
 const baseURL = '/api/v1'
 
 class ApiClient {
@@ -13,7 +13,7 @@ class ApiClient {
         this.instance = axios.create({
             baseURL,
             timeout: 30000,
-            withCredentials: true,  // Send httpOnly cookies automatically
+            withCredentials: true,
             headers: {
                 'Content-Type': 'application/json'
             }
@@ -23,35 +23,29 @@ class ApiClient {
     }
 
     private setupInterceptors() {
-        // Request interceptor
         this.instance.interceptors.request.use(
-            (config) => {
-                // Token is now sent automatically via httpOnly cookie.
-                // No manual Authorization header needed for cookie-based auth.
-                // Swagger UI still uses the token from login response via OAuth2 header.
-                return config
-            },
-            (error) => {
-                return Promise.reject(error)
-            }
+            (config) => config,
+            (error) => Promise.reject(error)
         )
 
-        // Response interceptor
         this.instance.interceptors.response.use(
             (response) => response,
-            (error) => {
+            async (error) => {
                 if (error.response) {
                     const { status, data } = error.response
 
                     if (status === 401) {
-                        // Skip redirect for login request to handle errors in component
                         if (error.config?.url?.includes('/auth/login')) {
                             return Promise.reject(error)
                         }
-                        // Clear login state and redirect
-                        localStorage.removeItem('logged_in')
-                        window.location.href = '/login'
-                        ElMessage({ message: '登录已过期,请重新登录', type: 'error', grouping: true })
+
+                        clearAuthState()
+
+                        if (router.currentRoute.value.path !== '/login') {
+                            await router.replace('/login')
+                        }
+
+                        ElMessage({ message: '登录已过期，请重新登录', type: 'error', grouping: true })
                     } else if (status === 403) {
                         ElMessage({ message: '权限不足', type: 'error', grouping: true })
                     } else if (status === 404) {
@@ -90,6 +84,5 @@ class ApiClient {
         return this.instance.request(config)
     }
 }
-
 
 export default new ApiClient()

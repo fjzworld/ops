@@ -1,4 +1,5 @@
-import os
+﻿import os
+import tempfile
 import logging
 from typing import List, Optional
 from datetime import datetime, timezone
@@ -45,6 +46,27 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MAX_UPLOAD_SIZE = 2000 * 1024 * 1024  # 2000MB (2GB)
+
+
+def get_deploy_operation_type(deploy_type: str) -> OperationType:
+    if deploy_type == "frontend":
+        return OperationType.FRONTEND_DEPLOY
+    if deploy_type == "backend":
+        return OperationType.BACKEND_DEPLOY
+    if deploy_type == "algorithm":
+        return OperationType.ALGORITHM_DEPLOY
+    raise BadRequestException(message=f"Unsupported deploy type: {deploy_type}")
+
+
+def get_deploy_operation_label(deploy_type: str) -> str:
+    labels = {
+        "frontend": "前端部署",
+        "backend": "后端部署",
+        "algorithm": "算法部署",
+    }
+    if deploy_type not in labels:
+        raise BadRequestException(message=f"Unsupported deploy type: {deploy_type}")
+    return labels[deploy_type]
 
 
 # ========== Generic Operation CRUD ==========
@@ -275,7 +297,7 @@ async def upload_dist_package(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Upload a frontend dist package (zip or tar.gz)"""
+    """Upload a deployment package (zip or tar.gz)."""
     if current_user.role != "admin":
         raise PermissionDeniedException(message="Only admin can deploy")
 
@@ -290,18 +312,41 @@ async def upload_dist_package(
     ):
         raise BadRequestException(message="Only .zip and .tar.gz files are supported")
 
-    content = await file.read()
-    if len(content) > MAX_UPLOAD_SIZE:
-        raise BadRequestException(
-            message=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // 1024 // 1024}MB"
-        )
+    deploy_type = request.query_params.get("deploy_type", "frontend")
+    tmp_path = None
+    total_size = 0
 
     try:
-        file_id, saved_path = DeployService.save_upload(content, file.filename)
-    except ValueError as e:
-        raise BadRequestException(message=str(e))
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            tmp_path = tmp_file.name
 
-    deploy_type = request.query_params.get("deploy_type", "frontend")
+        with open(tmp_path, "wb") as output_file:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > MAX_UPLOAD_SIZE:
+                    raise BadRequestException(
+                        message=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // 1024 // 1024}MB"
+                    )
+                output_file.write(chunk)
+
+        file_id, saved_path = DeployService.save_upload_from_path(tmp_path, file.filename)
+        tmp_path = None
+    except ValueError as e:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise BadRequestException(message=str(e))
+    except BadRequestException:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+    except Exception as e:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise InternalServerError(message=f"Failed to save upload: {str(e)}")
+
     valid, message = DeployService.validate_package(saved_path, deploy_type)
     if not valid:
         DeployService.cleanup_upload(file_id)
@@ -311,7 +356,7 @@ async def upload_dist_package(
         file_id=file_id,
         filename=file.filename,
         deploy_type=deploy_type,
-        size=len(content),
+        size=total_size,
         valid=True,
         message=message,
     )
@@ -323,7 +368,7 @@ async def execute_deploy(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_async_db),
 ):
-    """Execute frontend deployment — creates Operation record with execution history"""
+    """Execute a deployment and record execution history."""
     if current_user.role != "admin":
         raise PermissionDeniedException(message="Only admin can deploy")
     if request.deploy_type == "frontend" and len(request.resource_ids) > 2:
@@ -346,13 +391,17 @@ async def execute_deploy(
             )
         resources.append(resource)
 
-    # Create Operation record for this deployment
+    operation_type = get_deploy_operation_type(request.deploy_type)
+    operation_label = get_deploy_operation_label(request.deploy_type)
+
     operation = Operation(
-        name=f"前端部署 {os.path.basename(file_path)}",
+        name=f"{operation_label} {os.path.basename(file_path)}",
         description=f"部署到 {', '.join(r.name for r in resources)}",
-        operation_type=OperationType.FRONTEND_DEPLOY,
+        operation_type=operation_type,
         config={
+            "deploy_type": request.deploy_type,
             "restart_keepalived": request.restart_keepalived,
+            "restart_container": request.restart_container,
             "filename": os.path.basename(file_path),
         },
         target_resources=request.resource_ids,
@@ -383,7 +432,6 @@ async def execute_deploy(
     finally:
         DeployService.cleanup_upload(request.file_id)
 
-    # Update operation status
     overall_success = all(r.success for r in results)
     operation.status = (
         OperationStatus.SUCCESS if overall_success else OperationStatus.FAILED
@@ -398,25 +446,25 @@ async def execute_deploy(
     if not overall_success:
         operation.last_error = "; ".join(r.error for r in results if r.error)
 
-    # Save execution record
     execution = OperationExecution(
         operation_id=operation.id,
-        operation_type=OperationType.FRONTEND_DEPLOY,
+        operation_type=operation_type,
         status=OperationStatus.SUCCESS if overall_success else OperationStatus.FAILED,
         start_time=operation.last_run_at,
         end_time=datetime.now(timezone.utc),
         steps=[s.model_dump() for r in results for s in r.steps],
         input_data={
             "file_id": request.file_id,
+            "deploy_type": request.deploy_type,
             "resource_ids": request.resource_ids,
             "restart_keepalived": request.restart_keepalived,
+            "restart_container": request.restart_container,
         },
     )
     db.add(execution)
     await db.commit()
 
     return DeployResponse(success=overall_success, results=results)
-
 
 @router.get("/deploy/backups", response_model=List[BackupInfo])
 async def get_backups(
@@ -458,3 +506,9 @@ async def rollback_deploy(
         resource, request.backup_name, deploy_type=request.deploy_type
     )
     return DeployResponse(success=result.success, results=[result])
+
+
+
+
+
+
