@@ -78,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { Plus, VideoPlay, Bell, Document, Grid } from '@element-plus/icons-vue'
 import StatusOverview from '@/components/StatusOverview.vue'
 import HexGrid from '@/components/HexGrid.vue'

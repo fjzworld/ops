@@ -1,4 +1,4 @@
-﻿import { defineStore, getActivePinia } from 'pinia'
+import { defineStore, getActivePinia } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
 import type { LoginData, User } from '@/types/user'
@@ -30,7 +30,7 @@ export const useAuthStore = defineStore('auth', () => {
     const fetchCurrentUser = async () => {
         try {
             const { data } = await authApi.getCurrentUser()
-            user.value = data
+            user.value = data as any
             loggedIn.value = true
             localStorage.setItem('logged_in', '1')
         } catch {

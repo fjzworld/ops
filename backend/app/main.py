@@ -21,6 +21,7 @@ from app.api.v1 import (
     middlewares,
     logs,
     operations,
+    dashboard,
 )
 from app.services.scheduler import SchedulerService
 from app.models.operation import Operation, OperationType
@@ -98,6 +99,7 @@ app.include_router(
     middlewares.router, prefix="/api/v1/middlewares", tags=["Middlewares"]
 )
 app.include_router(logs.router, prefix="/api/v1/logs", tags=["Logs"])
+app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboard"])
 
 # Prometheus metrics endpoint
 metrics_app = make_asgi_app()

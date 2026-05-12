@@ -389,3 +389,23 @@ body::after {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3), var(--shadow-glow);
   border-color: var(--color-primary) !important;
 }
+
+/* 时间选择面板 Popover 样式修复 (增强覆盖) */
+.el-popper.is-light.algorithm-time-range-popper,
+.el-popover.algorithm-time-range-popper,
+.algorithm-time-range-popper {
+  --el-bg-color-overlay: var(--bg-secondary) !important;
+  --el-text-color-primary: var(--text-primary) !important;
+  background: var(--bg-secondary) !important;
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+
+.el-popper.is-light.algorithm-time-range-popper .el-popper__arrow::before,
+.el-popover.algorithm-time-range-popper .el-popper__arrow::before,
+.algorithm-time-range-popper .el-popper__arrow::before {
+  background: var(--bg-secondary) !important;
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-default) !important;
+}

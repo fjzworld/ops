@@ -85,6 +85,7 @@
       >
         <template #logs>
           <LogViewer
+            url=""
             :container-name="container.name"
             :logs="containerLogs"
             @refresh="loadLogs(container)"
@@ -105,7 +106,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Box, Search, Refresh, Loading, WarningFilled, 
   FolderOpened 
@@ -155,8 +156,8 @@ const filteredContainers = computed(() => {
 const loadResourceInfo = async () => {
   try {
     const res = await resourceApi.get(resourceId.value)
-    resourceName.value = res.data.name
-    resourceIp.value = res.data.ip_address
+    resourceName.value = res.data.name || ''
+    resourceIp.value = res.data.ip_address || ''
   } catch (e: any) {
     console.error('Failed to load resource info:', e)
   }
@@ -168,7 +169,7 @@ const loadContainers = async () => {
   try {
     const res = await dockerApi.listContainers(resourceId.value)
     containers.value = res.data.containers
-    resourceName.value = res.data.resource_name
+    resourceName.value = res.data.resource_name || ''
   } catch (e: any) {
     error.value = e.response?.data?.detail || '获取容器列表失败'
   } finally {

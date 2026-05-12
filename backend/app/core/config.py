@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     # Prometheus
     PROMETHEUS_URL: str = "http://prometheus:9090"
 
+    # Algorithm runtime dashboard MySQL datasource.
+    # Use a read-only MySQL account here, for example:
+    # mysql+pymysql://readonly:password@192.168.1.228:3306/hn_kongguan?charset=utf8mb4
+    ALGORITHM_DASHBOARD_DATABASE_URL: str = ""
+    ALGORITHM_DASHBOARD_SCHEMA: str = "hn_kongguan"
+    ALGORITHM_DASHBOARD_DEFAULT_REFRESH_SECONDS: int = 5
+    ALGORITHM_DASHBOARD_MAX_RANGE_DAYS: int = 31
+
     # External Loki URL for remote Promtail agents to push logs
     # Must be reachable from target servers (e.g. http://192.168.1.100:3100)
     LOKI_EXTERNAL_URL: str = ""

@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AlgorithmPanelChart: typeof import('./src/components/AlgorithmPanelChart.vue')['default']
     ContainerCard: typeof import('./src/components/ContainerCard.vue')['default']
     CriticalNodesList: typeof import('./src/components/CriticalNodesList.vue')['default']
     DistributionChart: typeof import('./src/components/DistributionChart.vue')['default']
@@ -42,6 +43,7 @@ declare module 'vue' {
     ElMenuItem: typeof import('element-plus/es')['ElMenuItem']
     ElOption: typeof import('element-plus/es')['ElOption']
     ElPagination: typeof import('element-plus/es')['ElPagination']
+    ElPopover: typeof import('element-plus/es')['ElPopover']
     ElProgress: typeof import('element-plus/es')['ElProgress']
     ElRadioButton: typeof import('element-plus/es')['ElRadioButton']
     ElRadioGroup: typeof import('element-plus/es')['ElRadioGroup']

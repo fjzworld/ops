@@ -130,7 +130,7 @@ const loadRules = async () => {
   loading.value = true
   try {
     const { data } = await alertApi.listRules()
-    rules.value = data
+    rules.value = data as any[]
   } catch (error) { ElMessage.error('加载失败') } finally { loading.value = false }
 }
 

@@ -258,7 +258,7 @@ const stopMonitoring = () => {
 const handleAction = async (action: string) => {
   actionLoading.value[action] = true
   try {
-    const { data } = await middlewareApi.controlMiddleware(id, { action })
+    const { data } = await middlewareApi.controlMiddleware(id, { action: action as 'start' | 'stop' | 'restart' })
     ElMessage.success(data.message || '操作成功')
     
     // Refresh details to update status

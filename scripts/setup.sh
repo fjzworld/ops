@@ -24,7 +24,6 @@ if [ ! -f .env ]; then
     echo -e "${YELLOW}⚠️  IMPORTANT: Please update the following in .env:${NC}"
     echo "  - POSTGRES_PASSWORD"
     echo "  - SECRET_KEY (generate with: openssl rand -hex 32)"
-    echo "  - GF_SECURITY_ADMIN_PASSWORD"
     echo ""
     read -p "Press Enter to continue after updating .env..."
 else
@@ -70,7 +69,6 @@ case $env_choice in
         echo "API Docs: http://localhost:8000/docs"
         echo "Nginx Proxy: http://localhost"
         echo "Prometheus: http://localhost:9090"
-        echo "Grafana: http://localhost:3000"
         echo "PostgreSQL: localhost:5432"
         echo "Redis: localhost:6379"
         ;;

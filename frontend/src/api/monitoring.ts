@@ -1,6 +1,5 @@
 import api from './client'
 import type { DashboardData } from '@/stores/dashboard'
-import type { MonitoringDashboardData } from '@/types/monitoring'
 
 export interface PrometheusValue {
     time: number;

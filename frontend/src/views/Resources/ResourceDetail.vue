@@ -67,7 +67,7 @@
       <div class="stats-grid">
         <div class="glass-panel stat-card" :class="getHealthClass(latestMetrics?.cpu_usage)">
           <div class="stat-header">
-            <span class="stat-title">CPU ???</span>
+            <span class="stat-title">CPU 使用率</span>
             <el-icon class="stat-icon"><Cpu /></el-icon>
           </div>
           <div class="stat-value">
@@ -1006,8 +1006,3 @@ onUnmounted(() => {
   transition: width 0.3s ease;
 }
 </style>
-
-
-
-
-

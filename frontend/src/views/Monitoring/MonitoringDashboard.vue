@@ -115,7 +115,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const res = await monitoringApi.getDashboard()
-    dashboardData.value = res.data
+    dashboardData.value = res.data as any
     lastUpdated.value = new Date().toLocaleTimeString()
   } catch (error) {
     console.error('Failed to load monitoring data:', error)

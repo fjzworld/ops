@@ -103,7 +103,7 @@ const loadAlerts = async () => {
   loading.value = true
   try {
     const { data } = await alertApi.listAlerts(filters)
-    alerts.value = data
+    alerts.value = data as any[]
   } catch (error) {
     ElMessage.error('加载告警列表失败')
   } finally {

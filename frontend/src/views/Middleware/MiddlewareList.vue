@@ -451,7 +451,7 @@ const handleSave = async () => {
       await middlewareApi.updateMiddleware(editingMiddleware.value.id, middlewareForm)
       ElMessage.success('更新成功')
     } else {
-      await middlewareApi.createMiddleware(middlewareForm)
+      await middlewareApi.createMiddleware(middlewareForm as any)
       ElMessage.success('添加成功')
     }
     showCreateDialog.value = false

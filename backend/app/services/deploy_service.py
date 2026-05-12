@@ -27,6 +27,15 @@ NGINX_BASE_DIR = "/usr/local/nginx"
 NGINX_HTML_DIR = f"{NGINX_BASE_DIR}/html"
 NGINX_BACKUP_DIR = f"{NGINX_BASE_DIR}/backup"
 NGINX_CONTAINER_NAME = "start_nginx"
+BACKEND_BASE_DIR = "/data/rayshon_web"
+BACKEND_PARENT_DIR = "/data"
+BACKEND_FOLDER_NAME = "rayshon_web"
+BACKEND_BACKUP_DIR = "/data/backup/rayshon_web"
+ALGORITHM_ROOT_DIR = "/data/rayshon"
+ALGORITHM_BASE_DIR = f"{ALGORITHM_ROOT_DIR}/python_server"
+ALGORITHM_PARENT_DIR = ALGORITHM_ROOT_DIR
+ALGORITHM_FOLDER_NAME = "python_server"
+ALGORITHM_BACKUP_DIR = "/data/backup/rayshon"
 
 
 class DeployService:
@@ -59,6 +68,7 @@ class DeployService:
         save_path = UPLOAD_DIR / f"{file_id}{ext}"
         shutil.move(source_path, save_path)
         return file_id, str(save_path)
+
     @staticmethod
     def validate_package(
         file_path: str, deploy_type: str = "frontend"
@@ -165,15 +175,22 @@ class DeployService:
             backup_dir = NGINX_BACKUP_DIR
             backup_prefix = "html"
             restart_commands = [f"docker restart {NGINX_CONTAINER_NAME}"]
+        elif deploy_type == "backend":
+            target_dir = BACKEND_BASE_DIR
+            target_parent = BACKEND_PARENT_DIR
+            target_folder = BACKEND_FOLDER_NAME
+            backup_dir = BACKEND_BACKUP_DIR
+            backup_prefix = "backend"
+            restart_commands = ["systemctl restart backend"]
+        elif deploy_type == "algorithm":
+            target_dir = ALGORITHM_BASE_DIR
+            target_parent = ALGORITHM_PARENT_DIR
+            target_folder = ALGORITHM_FOLDER_NAME
+            backup_dir = ALGORITHM_BACKUP_DIR
+            backup_prefix = "algorithm"
+            restart_commands = ["systemctl restart algorithm"]
         else:
-            # For backend/algorithm deployments - these should be configured per resource
-            # Using defaults for now
-            target_dir = f"/opt/{deploy_type}"
-            target_parent = "/opt"
-            target_folder = deploy_type
-            backup_dir = f"/opt/backup/{deploy_type}"
-            backup_prefix = deploy_type
-            restart_commands = [f"systemctl restart {deploy_type}"]
+            raise ValueError(f"Unsupported deploy type: {deploy_type}")
 
         credentials = CredentialService.get_ssh_credentials(resource)
         client = create_secure_client()
@@ -195,7 +212,7 @@ class DeployService:
                 connect_kwargs["password"] = credentials.password
 
             client.connect(**connect_kwargs)
-            step_log("SSH杩炴帴", "success")
+            step_log("SSH连接", "success")
 
             def execute(cmd: str) -> str:
                 if credentials.username != "root":
@@ -220,9 +237,9 @@ class DeployService:
                 execute(
                     f"tar -czf {backup_dir}/{backup_name} -C {target_parent} {target_folder}/"
                 )
-                step_log("澶囦唤褰撳墠浠ｇ爜", "success", backup_name)
+                step_log("备份当前代码", "success", backup_name)
             except Exception as e:
-                step_log("澶囦唤褰撳墠浠ｇ爜", "failed", str(e))
+                step_log("备份当前代码", "failed", str(e))
                 # Allow continuing if the target directory doesn't exist yet (first deploy)
 
             # 3. Clean old backups (older than 3 days)
@@ -230,18 +247,18 @@ class DeployService:
                 execute(
                     f"find {backup_dir} -name '{backup_prefix}_*.tar.gz' -mtime +3 -delete"
                 )
-                step_log("?????", "success")
+                step_log("清理旧备份", "success")
             except Exception:
-                step_log("?????", "success", "?????????")
+                step_log("清理旧备份", "success", "没有可清理的旧备份")
 
             # 4. Upload new package
             remote_tmp = f"/tmp/deploy_{uuid.uuid4().hex[:8]}"
             try:
                 with client.open_sftp() as sftp:
                     sftp.put(file_path, f"{remote_tmp}.pkg")
-                step_log("?????", "success")
+                step_log("上传代码包", "success")
             except Exception as e:
-                step_log("?????", "failed", str(e))
+                step_log("上传代码包", "failed", str(e))
                 return DeployResult(
                     server=server_name,
                     resource_id=resource.id,
@@ -292,15 +309,15 @@ class DeployService:
                         execute(f"cp -a {extract_dir}/* {target_dir}/")
 
                 execute(f"rm -rf {extract_dir} {remote_tmp}.pkg")
-                step_log("???????", "success")
+                step_log("解压并替换代码", "success")
             except Exception as e:
-                step_log("???????", "failed", str(e))
+                step_log("解压并替换代码", "failed", str(e))
                 try:
                     execute(f"rm -rf {target_dir}/*")
                     execute(f"tar -xzf {backup_dir}/{backup_name} -C {target_parent}")
-                    step_log("鑷姩鍥炴粴", "success", f"宸插洖婊氬埌 {backup_name}")
+                    step_log("自动回滚", "success", f"已回滚到 {backup_name}")
                 except Exception:
-                    step_log("鑷姩鍥炴粴", "failed", "鍥炴粴涔熷け璐ヤ簡锛岃鎵嬪姩澶勭悊")
+                    step_log("自动回滚", "failed", "回滚也失败了，请手动处理")
                 return DeployResult(
                     server=server_name,
                     resource_id=resource.id,
@@ -314,9 +331,9 @@ class DeployService:
                 for cmd in restart_commands:
                     try:
                         execute(cmd)
-                        step_log("閲嶅惎瀹瑰櫒", "success", cmd)
+                        step_log("重启容器", "success", cmd)
                     except Exception as e:
-                        step_log("閲嶅惎瀹瑰櫒", "failed", str(e))
+                        step_log("重启容器", "failed", str(e))
                         return DeployResult(
                             server=server_name,
                             resource_id=resource.id,
@@ -325,21 +342,21 @@ class DeployService:
                             error="Container restart failed",
                         )
             else:
-                step_log("閲嶅惎瀹瑰櫒", "success", "鐢ㄦ埛閫夋嫨璺宠繃閲嶅惎")
+                step_log("重启容器", "success", "用户选择跳过重启")
 
             # 7. Restart keepalived (only if frontend HA)
             if restart_keepalived and deploy_type == "frontend":
                 try:
                     execute("systemctl restart keepalived")
-                    step_log("閲嶅惎keepalived", "success")
+                    step_log("重启keepalived", "success")
                 except Exception as e:
-                    step_log("閲嶅惎keepalived", "failed", str(e))
+                    step_log("重启keepalived", "failed", str(e))
             return DeployResult(
                 server=server_name, resource_id=resource.id, success=True, steps=steps
             )
 
         except Exception as e:
-            step_log("閮ㄧ讲寮傚父", "failed", str(e))
+            step_log("部署异常", "failed", str(e))
             return DeployResult(
                 server=server_name,
                 resource_id=resource.id,
@@ -377,9 +394,14 @@ class DeployService:
             if deploy_type == "frontend":
                 backup_dir = NGINX_BACKUP_DIR
                 backup_prefix = "html"
+            elif deploy_type == "backend":
+                backup_dir = BACKEND_BACKUP_DIR
+                backup_prefix = "backend"
+            elif deploy_type == "algorithm":
+                backup_dir = ALGORITHM_BACKUP_DIR
+                backup_prefix = "algorithm"
             else:
-                backup_dir = f"/opt/backup/{deploy_type}"
-                backup_prefix = deploy_type
+                raise ValueError(f"Unsupported deploy type: {deploy_type}")
 
             cmd = f"ls -lh {backup_dir}/{backup_prefix}_*.tar.gz 2>/dev/null"
             if credentials.username != "root":
@@ -441,11 +463,18 @@ class DeployService:
             target_parent = NGINX_BASE_DIR
             backup_dir = NGINX_BACKUP_DIR
             restart_commands = [f"docker restart {NGINX_CONTAINER_NAME}"]
+        elif deploy_type == "backend":
+            target_dir = BACKEND_BASE_DIR
+            target_parent = BACKEND_PARENT_DIR
+            backup_dir = BACKEND_BACKUP_DIR
+            restart_commands = ["systemctl restart backend"]
+        elif deploy_type == "algorithm":
+            target_dir = ALGORITHM_BASE_DIR
+            target_parent = ALGORITHM_PARENT_DIR
+            backup_dir = ALGORITHM_BACKUP_DIR
+            restart_commands = ["systemctl restart algorithm"]
         else:
-            target_dir = f"/opt/{deploy_type}"
-            target_parent = "/opt"
-            backup_dir = f"/opt/backup/{deploy_type}"
-            restart_commands = [f"systemctl restart {deploy_type}"]
+            raise ValueError(f"Unsupported deploy type: {deploy_type}")
 
         # Validate backup_name to prevent injection
         expected_prefix = "html" if deploy_type == "frontend" else deploy_type
@@ -488,7 +517,7 @@ class DeployService:
                 connect_kwargs["password"] = credentials.password
 
             client.connect(**connect_kwargs)
-            step_log("SSH杩炴帴", "success")
+            step_log("SSH连接", "success")
 
             def execute(cmd: str) -> str:
                 if credentials.username != "root":
@@ -519,9 +548,9 @@ class DeployService:
             try:
                 execute(f"rm -rf {target_dir}/*")
                 execute(f"tar -xzf {backup_dir}/{backup_name} -C {target_parent}")
-                step_log("鎭㈠澶囦唤", "success", backup_name)
+                step_log("恢复备份", "success", backup_name)
             except Exception as e:
-                step_log("鎭㈠澶囦唤", "failed", str(e))
+                step_log("恢复备份", "failed", str(e))
                 return DeployResult(
                     server=server_name,
                     resource_id=resource.id,
@@ -535,9 +564,9 @@ class DeployService:
                 for cmd in restart_commands:
                     try:
                         execute(cmd)
-                        step_log("閲嶅惎瀹瑰櫒", "success", cmd)
+                        step_log("重启容器", "success", cmd)
                     except Exception as e:
-                        step_log("閲嶅惎瀹瑰櫒", "failed", str(e))
+                        step_log("重启容器", "failed", str(e))
                         return DeployResult(
                             server=server_name,
                             resource_id=resource.id,
@@ -546,15 +575,15 @@ class DeployService:
                             error="Container restart failed",
                         )
             else:
-                step_log("閲嶅惎瀹瑰櫒", "success", "鐢ㄦ埛閫夋嫨璺宠繃閲嶅惎")
+                step_log("重启容器", "success", "用户选择跳过重启")
 
             # Restart keepalived
             if restart_keepalived and deploy_type == "frontend":
                 try:
                     execute("systemctl restart keepalived")
-                    step_log("閲嶅惎keepalived", "success")
+                    step_log("重启keepalived", "success")
                 except Exception as e:
-                    step_log("閲嶅惎keepalived", "failed", str(e))
+                    step_log("重启keepalived", "failed", str(e))
             return DeployResult(
                 server=server_name, resource_id=resource.id, success=True, steps=steps
             )
@@ -569,6 +598,3 @@ class DeployService:
             )
         finally:
             client.close()
-
-
-

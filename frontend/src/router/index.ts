@@ -1,4 +1,4 @@
-﻿import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
@@ -103,6 +103,12 @@ const routes: RouteRecordRaw[] = [
                 name: 'Monitoring',
                 component: () => import('@/views/Monitoring/MonitoringDashboard.vue'),
                 meta: { roles: ['admin', 'operator', 'user', 'readonly'] }
+            },
+            {
+                path: 'algorithm-runtime',
+                name: 'AlgorithmRuntimeDashboard',
+                component: () => import('@/views/Dashboard/AlgorithmRuntimeDashboard.vue'),
+                meta: { title: '算法看板', roles: ['admin', 'operator', 'user', 'readonly'] }
             }
         ]
     },

@@ -26,13 +26,10 @@ graph TD
         Backend -->|Deploy| Agent[Grafana Alloy Agent]
         Agent -->|Push Metrics| Prometheus[(Prometheus)]
         Agent -->|Push Logs| Loki[(Loki)]
-        Prometheus -->|Visual| Grafana[Grafana Dashboard]
-        Loki -->|Visual| Grafana
+        Frontend -->|Query Trends| Backend
+        Backend -->|Query Data| Prometheus
+        Backend -->|Query Logs| Loki
     end
-    
-    Frontend -->|Query Trends| Backend
-    Backend -->|Query Data| Prometheus
-    Backend -->|Query Logs| Loki
 ```
 
 ## 技术栈
@@ -59,7 +56,6 @@ graph TD
 - **Docker & Docker Compose** - 容器化部署与编排
 - **Nginx** - 静态资源分发与高性能反向代理
 - **Grafana Alloy** - 下一代集成监控/日志采集 Agent
-- **Grafana** - 专业的数据可视化面板
 
 ## 快速开始
 
@@ -91,7 +87,6 @@ docker-compose logs -f
 - **后端接口 (API)**: http://localhost:8000
 - **交互文档 (Swagger)**: http://localhost:8000/api/docs
 - **时间序列 (Prometheus)**: http://localhost/prometheus
-- **数据可视化 (Grafana)**: http://localhost:3000 (admin/admin)
 
 ## 系统配置 (.env)
 
@@ -250,9 +245,6 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 
 ### 日志中心 (Loki)
 通过前台“日志中心”直接查询所有接入主机的 `/var/log/*.log` 系统日志。
-
-### 可视化面板 (Grafana)
-访问 http://localhost:3000 (admin/admin),内置了预设的 Redis、MySQL 及服务器性能大屏。
 
 ## 开发指南
 

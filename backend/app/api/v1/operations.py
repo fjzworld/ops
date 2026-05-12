@@ -69,6 +69,11 @@ def get_deploy_operation_label(deploy_type: str) -> str:
     return labels[deploy_type]
 
 
+def validate_deploy_type(deploy_type: str) -> str:
+    get_deploy_operation_type(deploy_type)
+    return deploy_type
+
+
 # ========== Generic Operation CRUD ==========
 
 
@@ -312,9 +317,12 @@ async def upload_dist_package(
     ):
         raise BadRequestException(message="Only .zip and .tar.gz files are supported")
 
-    deploy_type = request.query_params.get("deploy_type", "frontend")
+    deploy_type = validate_deploy_type(
+        request.query_params.get("deploy_type", "frontend")
+    )
     tmp_path = None
     total_size = 0
+    file_id = None
 
     try:
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
@@ -391,15 +399,16 @@ async def execute_deploy(
             )
         resources.append(resource)
 
-    operation_type = get_deploy_operation_type(request.deploy_type)
-    operation_label = get_deploy_operation_label(request.deploy_type)
+    deploy_type = validate_deploy_type(request.deploy_type)
+    operation_type = get_deploy_operation_type(deploy_type)
+    operation_label = get_deploy_operation_label(deploy_type)
 
     operation = Operation(
         name=f"{operation_label} {os.path.basename(file_path)}",
         description=f"部署到 {', '.join(r.name for r in resources)}",
         operation_type=operation_type,
         config={
-            "deploy_type": request.deploy_type,
+            "deploy_type": deploy_type,
             "restart_keepalived": request.restart_keepalived,
             "restart_container": request.restart_container,
             "filename": os.path.basename(file_path),
@@ -418,7 +427,7 @@ async def execute_deploy(
         results = await DeployService.deploy_to_servers(
             file_path,
             resources,
-            deploy_type=request.deploy_type,
+            deploy_type=deploy_type,
             restart_keepalived=request.restart_keepalived,
             restart_container=request.restart_container,
         )
@@ -455,7 +464,7 @@ async def execute_deploy(
         steps=[s.model_dump() for r in results for s in r.steps],
         input_data={
             "file_id": request.file_id,
-            "deploy_type": request.deploy_type,
+            "deploy_type": deploy_type,
             "resource_ids": request.resource_ids,
             "restart_keepalived": request.restart_keepalived,
             "restart_container": request.restart_container,

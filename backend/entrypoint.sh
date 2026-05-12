@@ -60,7 +60,38 @@ log_info "Redis is ready!"
 # Run database migrations with Alembic (if exists)
 if [ -f "alembic.ini" ]; then
     log_info "Running database migrations..."
-    alembic upgrade head
+    table_count=$(python - <<'PY'
+from sqlalchemy import text
+from app.core.database import engine
+
+with engine.connect() as conn:
+    result = conn.execute(
+        text(
+            """
+            SELECT count(*)
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_type = 'BASE TABLE'
+            """
+        )
+    )
+    print(result.scalar() or 0)
+PY
+)
+
+    if [ "$table_count" = "0" ]; then
+        log_warn "Database is empty, bootstrapping schema from SQLAlchemy models..."
+        python - <<'PY'
+import app.models  # noqa: F401 - ensure all models are registered on Base.metadata
+from app.core.database import Base, engine
+
+Base.metadata.create_all(bind=engine)
+PY
+        log_info "Schema bootstrap completed, stamping Alembic head..."
+        alembic stamp head
+    else
+        alembic upgrade head
+    fi
     log_info "Database migrations completed!"
 else
     log_warn "No alembic.ini found, skipping migrations"

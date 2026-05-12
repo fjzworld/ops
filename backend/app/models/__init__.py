@@ -6,6 +6,7 @@ from app.models.alert import Alert, AlertRule, AlertSeverity, AlertStatus
 from app.models.task import Task, TaskStatus
 from app.models.middleware import Middleware
 from app.models.audit_log import AuditLog
+from app.models.algorithm_dashboard_config import AlgorithmDashboardConfig
 
 __all__ = [
     "User",
@@ -20,4 +21,5 @@ __all__ = [
     "TaskStatus",
     "Middleware",
     "AuditLog",
+    "AlgorithmDashboardConfig",
 ]

@@ -129,6 +129,9 @@
                 </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
+                    <el-dropdown-item @click="handleEdit(row)">
+                      <el-icon><Edit /></el-icon> 编辑
+                    </el-dropdown-item>
                     <el-dropdown-item @click="$router.push(`/resources/${row.id}/containers`)">
                       <el-icon><Box /></el-icon> Docker容器
                     </el-dropdown-item>
@@ -241,13 +244,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, MoreFilled, Edit, Delete, Box } from '@element-plus/icons-vue'
 import { resourceApi } from '@/api/resources'
 import type { Resource } from '@/types/resource'
 
-const router = useRouter()
 const loading = ref(false)
 const saving = ref(false)
 const resources = ref<Resource[]>([])
@@ -365,13 +366,13 @@ const handleSave = async () => {
   saving.value = true
   try {
     if (editingResource.value) {
-      await resourceApi.update(editingResource.value.id, resourceForm) // Using generic update for simplicity in this file
+      await resourceApi.update(editingResource.value.id, resourceForm as any) // Using generic update for simplicity in this file
       ElMessage.success('更新成功')
     } else {
       // Auto-detect backend URL from browser location
       // This ensures the agent connects back to the same IP/domain the user is using
       const backendUrl = `${window.location.origin}/api/v1`
-      const payload = { ...resourceForm, backend_url: backendUrl }
+      const payload = { ...resourceForm, backend_url: backendUrl } as any
       
       await resourceApi.create(payload)
       ElMessage.success('添加成功，正在探测资源...')

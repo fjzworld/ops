@@ -173,7 +173,7 @@ const loadOperations = async () => {
       limit: pagination.pageSize,
       operation_type: 'script_exec' as const,
     }
-    const { data } = await operationsApi.list(params)
+    const { data } = await operationsApi.list(params as any)
     operations.value = data
     pagination.total = data.length
   } catch (error) {

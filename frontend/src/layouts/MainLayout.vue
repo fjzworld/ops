@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <el-container class="main-layout">
     <el-aside width="220px" class="sidebar">
       <div class="logo">
@@ -12,6 +12,10 @@
         <el-menu-item index="/dashboard">
           <el-icon><DataLine /></el-icon>
           <span>仪表盘</span>
+        </el-menu-item>
+        <el-menu-item index="/algorithm-runtime">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>算法看板</span>
         </el-menu-item>
         <el-menu-item index="/resources">
           <el-icon><Box /></el-icon>
@@ -76,7 +80,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { DataLine, Bell, User, Box, Coin, Document, Operation } from '@element-plus/icons-vue'
+import { DataLine, DataAnalysis, Bell, User, Box, Coin, Document, Operation } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -87,6 +91,7 @@ const activeMenu = computed(() => route.path)
 const pageTitle = computed(() => {
   const titles: Record<string, string> = {
     '/dashboard': '仪表盘',
+    '/algorithm-runtime': '算法看板',
     '/resources': '资源管理',
     '/middlewares': '中间件管理',
     '/logs': '日志中心',

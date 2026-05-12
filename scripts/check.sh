@@ -35,12 +35,6 @@ if [ -f .env ]; then
         echo -e "${GREEN}✓${NC} SECRET_KEY is set"
     fi
     
-    if grep -q "GF_SECURITY_ADMIN_PASSWORD=CHANGE_ME" .env; then
-        echo -e "${RED}✗${NC} GF_SECURITY_ADMIN_PASSWORD not updated"
-        ERRORS=$((ERRORS+1))
-    else
-        echo -e "${GREEN}✓${NC} GF_SECURITY_ADMIN_PASSWORD is set"
-    fi
 else
     echo -e "${RED}✗${NC} .env file not found"
     ERRORS=$((ERRORS+1))
