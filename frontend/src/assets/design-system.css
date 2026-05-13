@@ -390,10 +390,8 @@ body::after {
   border-color: var(--color-primary) !important;
 }
 
-/* 时间选择面板 Popover 样式修复 (增强覆盖) */
-.el-popper.is-light.algorithm-time-range-popper,
-.el-popover.algorithm-time-range-popper,
-.algorithm-time-range-popper {
+/* 全局修复：Element Plus 所有弹出层（Popover/Select/DatePicker/Dropdown/Tooltip）在暗黑主题下的白底问题 */
+.el-popper.is-light {
   --el-bg-color-overlay: var(--bg-secondary) !important;
   --el-text-color-primary: var(--text-primary) !important;
   background: var(--bg-secondary) !important;
@@ -402,10 +400,27 @@ body::after {
   color: var(--text-primary) !important;
 }
 
-.el-popper.is-light.algorithm-time-range-popper .el-popper__arrow::before,
-.el-popover.algorithm-time-range-popper .el-popper__arrow::before,
-.algorithm-time-range-popper .el-popper__arrow::before {
+.el-popper.is-light .el-popper__arrow::before {
   background: var(--bg-secondary) !important;
   background-color: var(--bg-secondary) !important;
   border: 1px solid var(--border-default) !important;
+}
+
+/* 全局修复：el-input__inner 文字颜色（含 datetime picker 内的时间 input）*/
+.el-input__inner {
+  color: var(--text-primary) !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+}
+
+.el-input__inner::placeholder {
+  color: var(--text-muted) !important;
+  -webkit-text-fill-color: var(--text-muted) !important;
+}
+
+/* datetime picker 面板内 input 背景也统一深色 */
+.el-date-picker .el-input__wrapper,
+.el-date-range-picker .el-input__wrapper,
+.el-date-editor .el-input__wrapper {
+  background: var(--bg-tertiary) !important;
+  border-color: var(--border-default) !important;
 }

@@ -14,7 +14,7 @@
       :image-size="80"
       class="empty-state"
     />
-    <div v-else ref="chartRef" class="chart-canvas"></div>
+    <div v-else ref="chartRef" class="chart-canvas" :style="canvasStyle"></div>
   </div>
 </template>
 
@@ -36,7 +36,7 @@ const pointCount = computed(() =>
   props.panel.series.reduce((sum, item) => sum + item.points.length, 0)
 )
 const isIntegrityPanel = computed(() => props.panel.key === 'basic_data_integrity')
-const isStatusPanel = computed(() => props.panel.key === 'algorithm_status_history')
+const isStatusPanel = computed(() => props.panel.key === 'algorithm_status_history' || props.panel.panel_type === 'status-history')
 const panelClass = computed(() => {
   if (isIntegrityPanel.value) {
     return 'panel-chart--integrity'
@@ -45,6 +45,22 @@ const panelClass = computed(() => {
     return 'panel-chart--status'
   }
   return 'panel-chart--timeseries'
+})
+
+// 热力图高度随序列数自适应，每行 24px，最小 440px
+const heatmapCanvasHeight = computed(() => {
+  if (!isStatusPanel.value && !isIntegrityPanel.value) return null
+  return Math.max(440, seriesCount.value * 24 + 60)
+})
+
+const canvasStyle = computed(() => {
+  if (heatmapCanvasHeight.value) {
+    return {
+      height: `${heatmapCanvasHeight.value}px`,
+      flex: 'none'
+    }
+  }
+  return {}
 })
 
 const renderChart = async () => {
@@ -61,6 +77,7 @@ const renderChart = async () => {
     resolveOption(),
     true
   )
+  chart.resize()
 }
 
 const resolveOption = (): EChartsOption => {
@@ -201,7 +218,7 @@ const buildIntegrityOption = (): EChartsOption => {
         ].join('')
       }
     },
-    grid: { left: 110, right: 24, top: 20, bottom: 44 },
+    grid: { left: 160, right: 24, top: 20, bottom: 44 },
     xAxis: {
       type: 'category',
       data: xLabels,
@@ -215,7 +232,11 @@ const buildIntegrityOption = (): EChartsOption => {
     yAxis: {
       type: 'category',
       data: yLabels,
-      axisLabel: { color: '#cbd5e1' },
+      axisLabel: {
+        color: '#cbd5e1',
+        fontSize: 11,
+        interval: 0
+      },
       axisTick: { show: false },
       splitArea: { show: false }
     },
@@ -281,7 +302,7 @@ const buildStatusOption = (): EChartsOption => {
         ].join('')
       }
     },
-    grid: { left: 190, right: 18, top: 18, bottom: 42 },
+    grid: { left: 220, right: 18, top: 18, bottom: 42 },
     xAxis: {
       type: 'category',
       data: xLabels,
@@ -297,7 +318,8 @@ const buildStatusOption = (): EChartsOption => {
       data: yLabels,
       axisLabel: {
         color: '#cbd5e1',
-        fontSize: 11
+        fontSize: 11,
+        interval: 0
       },
       axisTick: { show: false },
       splitArea: { show: false }
@@ -407,6 +429,11 @@ function formatTimeseriesTooltip(params: any[]) {
 const resizeChart = () => chart?.resize()
 
 watch(() => props.panel, renderChart, { deep: true })
+watch(heatmapCanvasHeight, () => {
+  nextTick(() => {
+    resizeChart()
+  })
+})
 
 onMounted(() => {
   renderChart()

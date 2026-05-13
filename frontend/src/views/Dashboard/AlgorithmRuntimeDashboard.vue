@@ -35,7 +35,7 @@
             <el-popover
               v-model:visible="showTimeRangePopover"
               placement="bottom-end"
-              :width="820"
+              :width="560"
               trigger="click"
               popper-class="algorithm-time-range-popper"
               @show="syncDraftTimeRange"
@@ -49,33 +49,17 @@
 
               <div class="time-range-popover">
                 <div class="time-range-absolute">
-                  <div class="popover-section-title">绝对时间范围</div>
+                  <div class="popover-section-title">自定义时间范围</div>
                   <div class="time-range-field">
                     <label>开始时间</label>
-                    <el-date-picker
-                      v-model="draftTimeRange[0]"
-                      type="datetime"
-                      value-format=""
-                      format="YYYY-MM-DD HH:mm:ss"
-                      class="absolute-picker"
-                    />
+                    <el-input v-model="draftStartTimeStr" placeholder="YYYY-MM-DD HH:mm:ss" />
                   </div>
                   <div class="time-range-field">
                     <label>结束时间</label>
-                    <el-date-picker
-                      v-model="draftTimeRange[1]"
-                      type="datetime"
-                      value-format=""
-                      format="YYYY-MM-DD HH:mm:ss"
-                      class="absolute-picker"
-                    />
+                    <el-input v-model="draftEndTimeStr" placeholder="YYYY-MM-DD HH:mm:ss" />
                   </div>
                   <div class="time-range-actions">
-                    <el-button class="glass-button" @click="setRangeToNow">最近 3 小时</el-button>
-                    <el-button class="glow-button" @click="applyDraftTimeRange">应用时间范围</el-button>
-                  </div>
-                  <div class="time-range-footer">
-                    浏览器时间 {{ browserTimezoneLabel }}
+                    <el-button class="glow-button" style="width: 100%" @click="applyDraftTimeRange">应用时间范围</el-button>
                   </div>
                 </div>
 
@@ -87,7 +71,7 @@
                       :key="preset.label"
                       type="button"
                       class="quick-range-item"
-                      @click="applyQuickRange(preset.minutes)"
+                      @click="applyQuickRangeImmediate(preset.minutes)"
                     >
                       {{ preset.label }}
                     </button>
@@ -216,7 +200,7 @@ const timeRange = ref<[Date, Date]>([
   new Date(now.getTime() - 3 * 60 * 60 * 1000),
   now
 ])
-const refreshSeconds = ref(5)
+const refreshSeconds = ref(0)
 const months = ref<string[]>([])
 const dashboard = ref<AlgorithmRuntimeDashboard | null>(null)
 const dashboardConfig = ref<AlgorithmDashboardConfig | null>(null)
@@ -229,7 +213,8 @@ const showTimeRangePopover = ref(false)
 const errorMessage = ref('')
 const lastUpdated = ref('')
 let refreshTimer: ReturnType<typeof setInterval> | null = null
-const draftTimeRange = ref<[Date, Date]>([new Date(timeRange.value[0]), new Date(timeRange.value[1])])
+const draftStartTimeStr = ref('')
+const draftEndTimeStr = ref('')
 const quickRanges = [
   { label: '最近 5 分钟', minutes: 5 },
   { label: '最近 15 分钟', minutes: 15 },
@@ -357,23 +342,23 @@ const startRefreshTimer = () => {
 }
 
 const syncDraftTimeRange = () => {
-  draftTimeRange.value = [new Date(timeRange.value[0]), new Date(timeRange.value[1])]
+  draftStartTimeStr.value = formatDateTime(timeRange.value[0])
+  draftEndTimeStr.value = formatDateTime(timeRange.value[1])
 }
 
-const applyQuickRange = (minutes: number) => {
+const applyQuickRangeImmediate = async (minutes: number) => {
   const end = new Date()
   const start = new Date(end.getTime() - minutes * 60 * 1000)
-  draftTimeRange.value = [start, end]
-}
-
-const setRangeToNow = () => {
-  applyQuickRange(180)
+  timeRange.value = [start, end]
+  showTimeRangePopover.value = false
+  await loadDashboard()
 }
 
 const applyDraftTimeRange = async () => {
-  const [start, end] = draftTimeRange.value
-  if (!(start instanceof Date) || !(end instanceof Date) || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    ElMessage.warning('请先选择有效的开始时间和结束时间')
+  const start = new Date(draftStartTimeStr.value.replace(' ', 'T'))
+  const end = new Date(draftEndTimeStr.value.replace(' ', 'T'))
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    ElMessage.warning('请输入有效的时间格式，例如：2025-09-10 14:21:13')
     return
   }
   if (start >= end) {
@@ -381,7 +366,7 @@ const applyDraftTimeRange = async () => {
     return
   }
 
-  timeRange.value = [new Date(start), new Date(end)]
+  timeRange.value = [start, end]
   showTimeRangePopover.value = false
   await loadDashboard()
 }
@@ -736,6 +721,11 @@ onUnmounted(() => {
 :deep(.algorithm-time-range-popper .el-range-input),
 :deep(.algorithm-time-range-popper .el-icon) {
   color: #475569;
+}
+
+/* 隐藏 datetime picker 面板顶部的日期/时间输入框 */
+:deep(.el-date-picker__time-header) {
+  display: none !important;
 }
 
 .dialog-actions {
