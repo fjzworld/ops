@@ -43,7 +43,7 @@
         <el-table-column prop="name" label="资源名称" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="name-col">
-              <span class="resource-name">{{ row.name }}</span>
+              <span class="resource-name resource-name-link" @click="$router.push(`/resources/${row.id}`)">{{ row.name }}</span>
               <span class="resource-desc" v-if="row.description">{{ row.description }}</span>
             </div>
           </template>
@@ -479,6 +479,17 @@ onMounted(loadResources)
   font-weight: 500;
   color: #F8FAFC;
   font-size: 14px;
+}
+
+.resource-name-link {
+  cursor: pointer;
+  color: #38BDF8;
+  transition: color 0.2s;
+
+  &:hover {
+    color: #7DD3FC;
+    text-decoration: underline;
+  }
 }
 
 .resource-desc {
