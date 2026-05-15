@@ -34,47 +34,47 @@ export const monitoringApi = {
 
     // Helper to get CPU history for a resource
     getResourceCpuHistory(resourceId: string | number, start: number, end: number) {
-        return this.queryRange(
-            `opspro_cpu_usage_percent{resource_id="${resourceId}"}`, 
+        return monitoringApi.queryRange(
+            `opspro_cpu_usage_percent{resource_id="${resourceId}"}`,
             start, end
         )
     },
 
     // Helper to get Memory history
     getResourceMemoryHistory(resourceId: string | number, start: number, end: number) {
-        return this.queryRange(
-            `opspro_memory_usage_percent{resource_id="${resourceId}"}`, 
+        return monitoringApi.queryRange(
+            `opspro_memory_usage_percent{resource_id="${resourceId}"}`,
             start, end
         )
     },
-    
+
     // Helper to get Disk history
     getResourceDiskHistory(resourceId: string | number, start: number, end: number) {
-        return this.queryRange(
-            `opspro_disk_usage_percent{resource_id="${resourceId}"}`, 
+        return monitoringApi.queryRange(
+            `opspro_disk_usage_percent{resource_id="${resourceId}"}`,
             start, end
         )
     },
 
     // Helper to get Network RX (receive) MB history
     getResourceNetworkRxHistory(resourceId: string | number, start: number, end: number) {
-        return this.queryRange(
-            `opspro_network_in_mb{resource_id="${resourceId}"}`, 
+        return monitoringApi.queryRange(
+            `opspro_network_in_mb{resource_id="${resourceId}"}`,
             start, end
         )
     },
 
     // Helper to get Network TX (transmit) MB history
     getResourceNetworkTxHistory(resourceId: string | number, start: number, end: number) {
-        return this.queryRange(
-            `opspro_network_out_mb{resource_id="${resourceId}"}`, 
+        return monitoringApi.queryRange(
+            `opspro_network_out_mb{resource_id="${resourceId}"}`,
             start, end
         )
     },
-    
+
     // Helper to get Disk Partitions Usage
     getResourceDiskPartitions(resourceId: string | number) {
-        return this.query(
+        return monitoringApi.query(
             `opspro_disk_partition_percent{resource_id="${resourceId}"}`
         )
     },

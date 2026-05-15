@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { ElMessage } from 'element-plus'
 import type { UserRole } from '@/types/user'
 
 const routes: RouteRecordRaw[] = [
@@ -132,37 +131,21 @@ function hasPermission(userRole: UserRole | undefined, allowedRoles: UserRole[])
 }
 
 router.beforeEach(async (to, _from, next) => {
-    const loggedIn = localStorage.getItem('logged_in')
     const authStore = useAuthStore()
 
-    if (to.meta.requiresAuth && !loggedIn) {
-        next('/login')
-        return
-    }
-
-    if (to.path === '/login' && loggedIn) {
-        next('/dashboard')
-        return
-    }
-
-    if (to.meta.requiresAuth && loggedIn) {
+    if (to.meta.requiresAuth) {
         if (!authStore.user) {
             await authStore.fetchCurrentUser()
         }
-
         if (!authStore.user) {
             next('/login')
             return
         }
+    }
 
-        const userRole = authStore.user.role as UserRole
-        const allowedRoles = (to.meta.roles as UserRole[]) || ['admin', 'operator', 'user', 'readonly']
-
-        if (!hasPermission(userRole, allowedRoles)) {
-            ElMessage.error('权限不足，无法访问该页面')
-            next('/unauthorized')
-            return
-        }
+    if (to.path === '/login' && authStore.user) {
+        next('/dashboard')
+        return
     }
 
     next()

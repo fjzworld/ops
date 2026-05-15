@@ -89,15 +89,31 @@ const dashboardStore = useDashboardStore()
 const currentDate = new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 let timer: ReturnType<typeof setInterval> | null = null
 
+const handleVisibilityChange = () => {
+  if (document.hidden) {
+    if (timer) {
+      clearInterval(timer)
+      timer = null
+    }
+  } else {
+    dashboardStore.fetchDashboardData()
+    timer = setInterval(() => {
+      dashboardStore.fetchDashboardData()
+    }, 10000)
+  }
+}
+
 onMounted(() => {
   dashboardStore.fetchDashboardData()
   timer = setInterval(() => {
     dashboardStore.fetchDashboardData()
   }, 10000)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onUnmounted(() => {
   if (timer) clearInterval(timer)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 

@@ -1,6 +1,7 @@
 import { defineStore, getActivePinia } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth'
+import { ElMessage } from 'element-plus'
 import type { LoginData, User } from '@/types/user'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -30,10 +31,11 @@ export const useAuthStore = defineStore('auth', () => {
     const fetchCurrentUser = async () => {
         try {
             const { data } = await authApi.getCurrentUser()
-            user.value = data as any
+            user.value = data
             loggedIn.value = true
             localStorage.setItem('logged_in', '1')
         } catch {
+            ElMessage.warning('登录状态已过期，请重新登录')
             user.value = null
             loggedIn.value = false
             localStorage.removeItem('logged_in')
@@ -58,8 +60,7 @@ export const clearAuthState = () => {
     const pinia = getActivePinia()
     if (pinia) {
         const store = useAuthStore(pinia)
-        store.user = null
-        store.loggedIn = false
+        store.$patch({ user: null, loggedIn: false })
     }
     localStorage.removeItem('logged_in')
 }

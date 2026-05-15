@@ -16,11 +16,11 @@ class Settings(BaseSettings):
     # Application
     APP_NAME: str = "OPS Platform"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = True
+    DEBUG: bool = False
 
     # Database
     DATABASE_URL: str = Field(
-        default="postgresql://opsuser:opspass@localhost:5432/opsplatform"
+        default="postgresql://localhost:5432/opsplatform"
     )
 
     # Redis
@@ -37,6 +37,7 @@ class Settings(BaseSettings):
 
     # Cookie security - set to True ONLY when serving over HTTPS
     # Default False because most deployments start without HTTPS
+    # Set to True when deploying behind HTTPS. Override via COOKIE_SECURE env var.
     COOKIE_SECURE: bool = False
 
     # Encryption key for sensitive data (SSH credentials, etc.)

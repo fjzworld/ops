@@ -22,6 +22,7 @@ def get_cipher_suite():
     if encryption_key:
         key_source = encryption_key.encode()
     else:
+        # WARNING: If SECRET_KEY changes, all encrypted data becomes unrecoverable. Set ENCRYPTION_KEY env var for production.
         # 使用 SHA-256 派生 32 字节密钥（避免直接截取）
         key_source = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
 

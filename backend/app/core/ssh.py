@@ -26,5 +26,6 @@ def create_secure_client() -> paramiko.SSHClient:
     # AutoAddPolicy: automatically add unknown host keys
     # Suitable for internal infrastructure managed by this platform
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    logger.warning("SSH AutoAddPolicy enabled — host keys are NOT verified. For production, consider using RejectPolicy with pre-configured known_hosts.")
 
     return client

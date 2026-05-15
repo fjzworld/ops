@@ -15,8 +15,8 @@ export interface DashboardData {
     distribution: {
         cpu: Record<string, number>;
     };
-    all_nodes: any[];
-    top_nodes: any[];
+    all_nodes: Array<{ id: number; name: string; status: string; cpu_usage: number; memory_usage: number }>;
+    top_nodes: Array<{ id: number; name: string; status: string; cpu_usage: number; memory_usage: number }>;
 }
 
 export const useDashboardStore = defineStore('dashboard', () => {

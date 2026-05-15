@@ -1,4 +1,5 @@
 import api from './client'
+import type { DashboardSummary } from '@/stores/dashboard'
 import {
     Resource,
     ResourceListParams,
@@ -41,11 +42,11 @@ export const resourceApi = {
     },
 
     getStats() {
-        return api.get<any>('/resources/stats/summary')
+        return api.get<{ summary: DashboardSummary }>('/resources/stats/summary')
     },
 
     probe(credentials: ResourceCreateRequest) {
-        return api.post<any>('/resources/probe', credentials)
+        return api.post<{ success: boolean; message: string }>('/resources/probe', credentials)
     },
 
     deployAlloy(id: number, data?: any) {

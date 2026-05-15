@@ -1,9 +1,7 @@
 import api from './client'
+import type { LoginData, User } from '@/types/user'
 
-export interface LoginData {
-    username: string
-    password: string
-}
+export type { LoginData, User }
 
 export interface RegisterData {
     username: string
@@ -16,15 +14,6 @@ export interface RegisterData {
 export interface Token {
     access_token: string
     token_type: string
-}
-
-export interface User {
-    id: number
-    username: string
-    email: string
-    full_name: string
-    role: string
-    is_active: boolean
 }
 
 export const authApi = {

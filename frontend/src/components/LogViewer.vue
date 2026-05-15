@@ -49,6 +49,7 @@ let resizeObserver: ResizeObserver | null = null
 let logBuffer: string[] = []
 
 const initTerminal = () => {
+  if (term) return
   if (!terminalContainer.value) return
 
   term = new Terminal({
@@ -69,6 +70,7 @@ const initTerminal = () => {
   term.open(terminalContainer.value)
   
   // Fit on resize
+  if (resizeObserver) resizeObserver.disconnect()
   resizeObserver = new ResizeObserver(() => {
     fitAddon?.fit()
   })

@@ -54,7 +54,6 @@
               type="primary"
               :loading="loading"
               class="tech-button"
-              @click="handleLogin"
             >
               <span class="button-text">启动系统</span>
               <div class="button-glare"></div>
