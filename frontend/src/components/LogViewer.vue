@@ -10,6 +10,9 @@
           clearable
           style="width: 200px; margin-right: 12px;"
         />
+        <el-button size="small" @click="emit('refresh')">
+          <el-icon><Refresh /></el-icon> 刷新
+        </el-button>
         <el-button size="small" @click="clearTerminal">
           <el-icon><Delete /></el-icon> 清空
         </el-button>
@@ -24,10 +27,15 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
-import { Delete } from '@element-plus/icons-vue'
+import { Delete, Refresh } from '@element-plus/icons-vue'
 
 const props = defineProps<{
-  url: string
+  url?: string
+  logs?: string
+}>()
+
+const emit = defineEmits<{
+  refresh: []
 }>()
 
 const terminalContainer = ref<HTMLElement | null>(null)
@@ -114,6 +122,12 @@ const connectWebSocket = () => {
   }
 }
 
+const setStaticLogs = (logs: string) => {
+    logBuffer = logs ? logs.split('\n') : []
+    refreshTerminal()
+    fitAddon?.fit()
+}
+
 const refreshTerminal = () => {
     if (!term) return
     term.clear()
@@ -147,9 +161,19 @@ watch(() => props.url, () => {
     connectWebSocket()
 })
 
+watch(() => props.logs, (logs) => {
+    if (!props.url) {
+        setStaticLogs(logs || '')
+    }
+})
+
 onMounted(() => {
   initTerminal()
-  connectWebSocket()
+  if (props.url) {
+    connectWebSocket()
+  } else {
+    setStaticLogs(props.logs || '')
+  }
 })
 
 onUnmounted(() => {

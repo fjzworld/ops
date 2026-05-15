@@ -74,6 +74,7 @@ class UploadResponse(BaseModel):
     file_id: str
     filename: str
     deploy_type: str = "frontend"
+    target_path: str = ""
     size: int
     valid: bool
     message: str

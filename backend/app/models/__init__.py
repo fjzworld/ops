@@ -7,6 +7,7 @@ from app.models.task import Task, TaskStatus
 from app.models.middleware import Middleware
 from app.models.audit_log import AuditLog
 from app.models.algorithm_dashboard_config import AlgorithmDashboardConfig
+from app.models.deploy_path_config import DeployPathConfig
 
 __all__ = [
     "User",
@@ -22,4 +23,5 @@ __all__ = [
     "Middleware",
     "AuditLog",
     "AlgorithmDashboardConfig",
+    "DeployPathConfig",
 ]

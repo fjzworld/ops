@@ -5,6 +5,7 @@ export interface UploadResponse {
     file_id: string
     filename: string
     deploy_type: string
+    target_path: string
     size: number
     valid: boolean
     message: string
@@ -35,6 +36,25 @@ export interface BackupInfo {
     name: string
     size: string
     created_at: string
+}
+
+export interface DeployPathConfig {
+    deploy_type: string
+    target_dir: string
+    backup_dir: string
+    parent_dir: string
+    folder_name: string
+    restart_commands: string[]
+    container_name: string | null
+}
+
+export interface DeployPathConfigPayload {
+    target_dir: string
+    backup_dir: string
+    parent_dir: string
+    folder_name: string
+    restart_commands: string[]
+    container_name: string | null
 }
 
 export interface OperationListParams {
@@ -90,5 +110,12 @@ export const operationsApi = {
     },
     rollback(params: { resource_id: number; deploy_type: string; backup_name: string }) {
         return api.post<DeployResponse>('/operations/deploy/rollback', params)
+    },
+
+    getDeployPaths() {
+        return api.get<DeployPathConfig[]>('/operations/deploy/paths')
+    },
+    updateDeployPath(deployType: string, payload: DeployPathConfigPayload) {
+        return api.put<DeployPathConfig>(`/operations/deploy/paths/${deployType}`, payload)
     },
 }

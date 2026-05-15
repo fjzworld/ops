@@ -8,10 +8,16 @@
       </div>
       <div class="deploy-type-selector">
         <el-radio-group v-model="deployType" class="type-radio-group" @change="resetUploadState">
-          <el-radio-button value="frontend">前端代码 (Nginx)</el-radio-button>
-          <el-radio-button value="backend">后端代码 (Docker-Compose)</el-radio-button>
-          <el-radio-button value="algorithm">算法代码 (多容器)</el-radio-button>
+          <el-radio-button value="frontend">前端</el-radio-button>
+          <el-radio-button value="backend">后端</el-radio-button>
+          <el-radio-button value="algorithm">算法</el-radio-button>
         </el-radio-group>
+        <el-button size="small" circle @click="openPathConfigDialog" class="path-config-btn" title="路径配置">
+          <el-icon><Setting /></el-icon>
+        </el-button>
+      </div>
+      <div v-if="currentPathConfig" class="path-summary">
+        上传路径：{{ currentPathConfig.target_dir }}
       </div>
 
       <div class="upload-area">
@@ -153,6 +159,38 @@
       </div>
     </div>
 
+    <!-- Path Config Dialog -->
+    <el-dialog v-model="showPathConfigDialog" title="部署路径配置" width="600px" destroy-on-close>
+      <el-tabs v-model="activeConfigTab">
+        <el-tab-pane v-for="cfg in orderedPathConfigs" :key="cfg.deploy_type" :label="deployTypeLabelMap[cfg.deploy_type] || cfg.deploy_type" :name="cfg.deploy_type">
+          <el-form :model="editingConfig[cfg.deploy_type]" label-width="120px" label-position="left" size="small">
+            <el-form-item label="目标目录">
+              <el-input v-model="editingConfig[cfg.deploy_type].target_dir" />
+            </el-form-item>
+            <el-form-item label="备份目录">
+              <el-input v-model="editingConfig[cfg.deploy_type].backup_dir" />
+            </el-form-item>
+            <el-form-item label="父目录">
+              <el-input v-model="editingConfig[cfg.deploy_type].parent_dir" />
+            </el-form-item>
+            <el-form-item label="文件夹名">
+              <el-input v-model="editingConfig[cfg.deploy_type].folder_name" />
+            </el-form-item>
+            <el-form-item label="容器名">
+              <el-input v-model="editingConfig[cfg.deploy_type].container_name" />
+            </el-form-item>
+            <el-form-item label="重启命令">
+              <el-input v-model="editingConfig[cfg.deploy_type].restart_commands_str" type="textarea" :rows="3" placeholder="每行一条命令" />
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+      </el-tabs>
+      <template #footer>
+        <el-button @click="showPathConfigDialog = false" class="glass-button">取消</el-button>
+        <el-button type="primary" @click="savePathConfig">保存配置</el-button>
+      </template>
+    </el-dialog>
+
     <!-- Rollback Dialog -->
     <el-dialog
       v-model="showRollbackDialog"
@@ -225,9 +263,9 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadInstance, UploadFile, UploadRawFile } from 'element-plus'
 import {
-  UploadFilled, Upload, Document, Select, Promotion, RefreshLeft
+  UploadFilled, Upload, Document, Select, Promotion, RefreshLeft, Setting
 } from '@element-plus/icons-vue'
-import { operationsApi, type UploadResponse, type DeployResult, type BackupInfo } from '@/api/operations'
+import { operationsApi, type UploadResponse, type DeployResult, type BackupInfo, type DeployPathConfig, type DeployPathConfigPayload } from '@/api/operations'
 import { resourceApi } from '@/api/resources'
 
 interface SimpleResource {
@@ -261,6 +299,31 @@ const rollbackBackupName = ref('')
 const loadingBackups = ref(false)
 const backups = ref<BackupInfo[]>([])
 const rollingBack = ref(false)
+
+const showPathConfigDialog = ref(false)
+const pathConfigs = ref<DeployPathConfig[]>([])
+const activeConfigTab = ref('frontend')
+const editingConfig = ref<Record<string, DeployPathConfigPayload & { restart_commands_str: string }>>({})
+const deployTypeLabelMap: Record<string, string> = {
+  frontend: '前端',
+  backend: '后端',
+  algorithm: '算法'
+}
+const deployTypeOrder: Record<string, number> = {
+  frontend: 1,
+  backend: 2,
+  algorithm: 3
+}
+const orderedPathConfigs = computed(() => {
+  return [...pathConfigs.value].sort((a, b) => {
+    const oa = deployTypeOrder[a.deploy_type] ?? 99
+    const ob = deployTypeOrder[b.deploy_type] ?? 99
+    return oa - ob
+  })
+})
+const currentPathConfig = computed(() => {
+  return pathConfigs.value.find(c => c.deploy_type === deployType.value) || null
+})
 
 const canDeploy = computed(() => {
   return uploadResult.value?.valid && fileId.value && selectedResourceIds.value.length > 0
@@ -422,6 +485,56 @@ const handleRollback = async () => {
   }
 }
 
+const loadPathConfigs = async () => {
+  try {
+    const { data } = await operationsApi.getDeployPaths()
+    pathConfigs.value = data
+    const map: Record<string, DeployPathConfigPayload & { restart_commands_str: string }> = {}
+    data.forEach((c: DeployPathConfig) => {
+      map[c.deploy_type] = {
+        target_dir: c.target_dir,
+        backup_dir: c.backup_dir,
+        parent_dir: c.parent_dir,
+        folder_name: c.folder_name,
+        restart_commands: [...c.restart_commands],
+        container_name: c.container_name,
+        restart_commands_str: (c.restart_commands || []).join('\n')
+      }
+    })
+    editingConfig.value = map
+  } catch {
+    ElMessage.error('加载路径配置失败')
+  }
+}
+
+const openPathConfigDialog = async () => {
+  await loadPathConfigs()
+  showPathConfigDialog.value = true
+}
+
+const savePathConfig = async () => {
+  const type = activeConfigTab.value
+  const edit = editingConfig.value[type]
+  if (!edit) return
+  const payload: DeployPathConfigPayload = {
+    target_dir: edit.target_dir,
+    backup_dir: edit.backup_dir,
+    parent_dir: edit.parent_dir,
+    folder_name: edit.folder_name,
+    restart_commands: edit.restart_commands_str.split('\n').filter((s: string) => s.trim()),
+    container_name: edit.container_name || null
+  }
+  try {
+    const { data } = await operationsApi.updateDeployPath(type, payload)
+    const idx = pathConfigs.value.findIndex(c => c.deploy_type === type)
+    if (idx >= 0) pathConfigs.value[idx] = data
+    ElMessage.success('路径配置已保存')
+    showPathConfigDialog.value = false
+  } catch {
+    ElMessage.error('保存路径配置失败')
+  }
+}
+
 // Load resources
 const loadResources = async () => {
   loadingResources.value = true
@@ -441,6 +554,7 @@ const loadResources = async () => {
 
 onMounted(() => {
   loadResources()
+  loadPathConfigs()
 })
 </script>
 
@@ -504,6 +618,19 @@ onMounted(() => {
 
 .deploy-type-selector {
   margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.path-config-btn {
+  flex-shrink: 0;
+}
+
+.path-summary {
+  margin-bottom: 12px;
+  color: #94A3B8;
+  font-size: 13px;
 }
 
 :deep(.type-radio-group .el-radio-button__inner) {
@@ -857,5 +984,10 @@ onMounted(() => {
 
 :deep(.el-alert) {
   border-radius: 8px;
+}
+
+/* Ensure deploy-path tabs render left-to-right in this dialog */
+:deep(.el-tabs__nav) {
+  flex-direction: row !important;
 }
 </style>

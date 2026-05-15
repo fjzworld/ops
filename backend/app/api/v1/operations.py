@@ -35,6 +35,8 @@ from app.schemas.deploy import (
 from app.tasks.automation import run_automation_task
 from app.services.scheduler import SchedulerService
 from app.services.deploy_service import DeployService
+from app.services.deploy_path_service import DeployPathConfigService
+from app.schemas.deploy_path import DeployPathConfigRead, DeployPathConfigUpdate
 from app.core.exceptions import (
     NotFoundException,
     PermissionDeniedException,
@@ -293,6 +295,31 @@ async def get_execution_details(
     return execution
 
 
+# ========== Deploy Path Config Endpoints ==========
+
+
+@router.get("/deploy/paths", response_model=list[DeployPathConfigRead])
+async def get_deploy_paths(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_async_db),
+):
+    return await DeployPathConfigService.get_all(db)
+
+
+@router.put("/deploy/paths/{deploy_type}", response_model=DeployPathConfigRead)
+async def update_deploy_path(
+    deploy_type: str,
+    payload: DeployPathConfigUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_async_db),
+):
+    if current_user.role != "admin":
+        raise PermissionDeniedException(message="仅管理员可修改部署路径配置")
+    result = await DeployPathConfigService.upsert(db, deploy_type, payload)
+    DeployService.clear_config_cache()
+    return result
+
+
 # ========== Deploy Endpoints ==========
 
 
@@ -360,10 +387,20 @@ async def upload_dist_package(
         DeployService.cleanup_upload(file_id)
         raise BadRequestException(message=message)
 
+    cfg = DeployPathConfigService.get_config(deploy_type)
+    if cfg:
+        target_path = cfg.target_dir
+    else:
+        target_path = {
+            "frontend": "/usr/local/nginx/html",
+            "backend": "/data/rayshon_web",
+            "algorithm": "/data/rayshon/python_server",
+        }.get(deploy_type, "")
     return UploadResponse(
         file_id=file_id,
         filename=file.filename,
         deploy_type=deploy_type,
+        target_path=target_path,
         size=total_size,
         valid=True,
         message=message,

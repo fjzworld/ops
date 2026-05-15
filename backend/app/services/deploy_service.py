@@ -5,6 +5,7 @@ import zipfile
 import tarfile
 import tempfile
 import shutil
+from functools import lru_cache
 from pathlib import Path
 from typing import List, Tuple, Optional
 from datetime import datetime
@@ -14,6 +15,7 @@ import paramiko
 from app.core.ssh import create_secure_client
 from app.models.resource import Resource
 from app.services.credential_service import CredentialService
+from app.services.deploy_path_service import DeployPathConfigService
 from app.schemas.deploy import DeployResult, DeployStepLog
 
 logger = logging.getLogger(__name__)
@@ -22,23 +24,72 @@ logger = logging.getLogger(__name__)
 UPLOAD_DIR = Path(tempfile.gettempdir()) / "ops_deploy_uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-# Remote paths on target servers
-NGINX_BASE_DIR = "/usr/local/nginx"
-NGINX_HTML_DIR = f"{NGINX_BASE_DIR}/html"
-NGINX_BACKUP_DIR = f"{NGINX_BASE_DIR}/backup"
-NGINX_CONTAINER_NAME = "start_nginx"
-BACKEND_BASE_DIR = "/data/rayshon_web"
-BACKEND_PARENT_DIR = "/data"
-BACKEND_FOLDER_NAME = "rayshon_web"
-BACKEND_BACKUP_DIR = "/data/backup/rayshon_web"
-ALGORITHM_ROOT_DIR = "/data/rayshon"
-ALGORITHM_BASE_DIR = f"{ALGORITHM_ROOT_DIR}/python_server"
-ALGORITHM_PARENT_DIR = ALGORITHM_ROOT_DIR
-ALGORITHM_FOLDER_NAME = "python_server"
-ALGORITHM_BACKUP_DIR = "/data/backup/rayshon"
+# Default remote paths (fallback when DB config is unavailable)
+_DEFAULTS = {
+    "frontend": {
+        "target_dir": "/usr/local/nginx/html",
+        "backup_dir": "/usr/local/nginx/backup",
+        "parent_dir": "/usr/local/nginx",
+        "folder_name": "html",
+        "restart_commands": ["docker restart start_nginx"],
+        "container_name": "start_nginx",
+    },
+    "backend": {
+        "target_dir": "/data/rayshon_web",
+        "backup_dir": "/data/backup/rayshon_web",
+        "parent_dir": "/data",
+        "folder_name": "rayshon_web",
+        "restart_commands": [
+            "docker-compose -f /data/rayshon_web/docker-compose.yml restart"
+        ],
+        "container_name": None,
+    },
+    "algorithm": {
+        "target_dir": "/data/rayshon/python_server",
+        "backup_dir": "/data/backup/rayshon",
+        "parent_dir": "/data/rayshon",
+        "folder_name": "python_server",
+        "restart_commands": [
+            "find /opt/start_container -name 'docker-compose.yml' | sort | while read f; do (cd \"$(dirname \"$f\")\" && docker-compose restart); done"
+        ],
+        "container_name": None,
+    },
+}
+
+
+class _DeployConfig:
+    """从数据库或默认值加载的部署配置"""
+
+    def __init__(self, deploy_type: str):
+        row = DeployPathConfigService.get_config(deploy_type)
+        if row:
+            self.target_dir = row.target_dir
+            self.backup_dir = row.backup_dir
+            self.parent_dir = row.parent_dir
+            self.folder_name = row.folder_name
+            self.restart_commands = row.restart_commands
+            self.container_name = row.container_name
+        else:
+            defaults = _DEFAULTS.get(deploy_type, _DEFAULTS["frontend"])
+            self.target_dir = defaults["target_dir"]
+            self.backup_dir = defaults["backup_dir"]
+            self.parent_dir = defaults["parent_dir"]
+            self.folder_name = defaults["folder_name"]
+            self.restart_commands = defaults["restart_commands"]
+            self.container_name = defaults.get("container_name")
+
+
+@lru_cache(maxsize=3)
+def _get_deploy_config(deploy_type: str) -> _DeployConfig:
+    return _DeployConfig(deploy_type)
 
 
 class DeployService:
+    @staticmethod
+    def clear_config_cache():
+        """Clear the deploy config cache after a path configuration update."""
+        _get_deploy_config.cache_clear()
+
     @staticmethod
     def save_upload(file_content: bytes, filename: str) -> Tuple[str, str]:
         """Save uploaded file content, return (file_id, saved_path)."""
@@ -167,30 +218,14 @@ class DeployService:
             else:
                 logger.info(f"[Deploy:{server_name}] {step}: {status} {message}")
 
-        # Define paths based on deploy_type
-        if deploy_type == "frontend":
-            target_dir = NGINX_HTML_DIR
-            target_parent = NGINX_BASE_DIR
-            target_folder = "html"
-            backup_dir = NGINX_BACKUP_DIR
-            backup_prefix = "html"
-            restart_commands = [f"docker restart {NGINX_CONTAINER_NAME}"]
-        elif deploy_type == "backend":
-            target_dir = BACKEND_BASE_DIR
-            target_parent = BACKEND_PARENT_DIR
-            target_folder = BACKEND_FOLDER_NAME
-            backup_dir = BACKEND_BACKUP_DIR
-            backup_prefix = "backend"
-            restart_commands = ["systemctl restart backend"]
-        elif deploy_type == "algorithm":
-            target_dir = ALGORITHM_BASE_DIR
-            target_parent = ALGORITHM_PARENT_DIR
-            target_folder = ALGORITHM_FOLDER_NAME
-            backup_dir = ALGORITHM_BACKUP_DIR
-            backup_prefix = "algorithm"
-            restart_commands = ["systemctl restart algorithm"]
-        else:
-            raise ValueError(f"Unsupported deploy type: {deploy_type}")
+        # Load paths from database config (with fallback to defaults)
+        cfg = _get_deploy_config(deploy_type)
+        target_dir = cfg.target_dir
+        target_parent = cfg.parent_dir
+        target_folder = cfg.folder_name
+        backup_dir = cfg.backup_dir
+        backup_prefix = deploy_type
+        restart_commands = list(cfg.restart_commands)
 
         credentials = CredentialService.get_ssh_credentials(resource)
         client = create_secure_client()
@@ -391,17 +426,9 @@ class DeployService:
 
             client.connect(**connect_kwargs)
 
-            if deploy_type == "frontend":
-                backup_dir = NGINX_BACKUP_DIR
-                backup_prefix = "html"
-            elif deploy_type == "backend":
-                backup_dir = BACKEND_BACKUP_DIR
-                backup_prefix = "backend"
-            elif deploy_type == "algorithm":
-                backup_dir = ALGORITHM_BACKUP_DIR
-                backup_prefix = "algorithm"
-            else:
-                raise ValueError(f"Unsupported deploy type: {deploy_type}")
+            cfg = _get_deploy_config(deploy_type)
+            backup_dir = cfg.backup_dir
+            backup_prefix = deploy_type
 
             cmd = f"ls -lh {backup_dir}/{backup_prefix}_*.tar.gz 2>/dev/null"
             if credentials.username != "root":
@@ -457,27 +484,14 @@ class DeployService:
                 )
             )
 
-        # Define paths based on deploy_type
-        if deploy_type == "frontend":
-            target_dir = NGINX_HTML_DIR
-            target_parent = NGINX_BASE_DIR
-            backup_dir = NGINX_BACKUP_DIR
-            restart_commands = [f"docker restart {NGINX_CONTAINER_NAME}"]
-        elif deploy_type == "backend":
-            target_dir = BACKEND_BASE_DIR
-            target_parent = BACKEND_PARENT_DIR
-            backup_dir = BACKEND_BACKUP_DIR
-            restart_commands = ["systemctl restart backend"]
-        elif deploy_type == "algorithm":
-            target_dir = ALGORITHM_BASE_DIR
-            target_parent = ALGORITHM_PARENT_DIR
-            backup_dir = ALGORITHM_BACKUP_DIR
-            restart_commands = ["systemctl restart algorithm"]
-        else:
-            raise ValueError(f"Unsupported deploy type: {deploy_type}")
+        cfg = _get_deploy_config(deploy_type)
+        target_dir = cfg.target_dir
+        target_parent = cfg.parent_dir
+        backup_dir = cfg.backup_dir
+        restart_commands = list(cfg.restart_commands)
 
         # Validate backup_name to prevent injection
-        expected_prefix = "html" if deploy_type == "frontend" else deploy_type
+        expected_prefix = deploy_type
         if not backup_name.startswith(f"{expected_prefix}_") or not backup_name.endswith(
             ".tar.gz"
         ):
