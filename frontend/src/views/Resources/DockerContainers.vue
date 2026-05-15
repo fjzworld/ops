@@ -210,28 +210,56 @@ const handleStart = async (container: Container) => {
 }
 
 const handleStop = async (container: Container) => {
-  actionLoading.value[container.id] = 'stop'
   try {
-    await dockerApi.stopContainer(resourceId.value, container.id)
-    ElMessage.success(`容器 ${container.name} 已停止`)
-    await loadContainers()
-  } catch (e: any) {
-    ElMessage.error(e.response?.data?.detail || '停止失败')
-  } finally {
-    delete actionLoading.value[container.id]
+    await ElMessageBox.confirm(
+      `确定要停止容器 ${container.name} 吗？`,
+      '停止确认',
+      {
+        confirmButtonText: '确认停止',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    actionLoading.value[container.id] = 'stop'
+    try {
+      await dockerApi.stopContainer(resourceId.value, container.id)
+      ElMessage.success(`容器 ${container.name} 已停止`)
+      await loadContainers()
+    } catch (e: any) {
+      ElMessage.error(e.response?.data?.detail || '停止失败')
+    } finally {
+      delete actionLoading.value[container.id]
+    }
+  } catch {
+    // User cancelled
   }
 }
 
 const handleRestart = async (container: Container) => {
-  actionLoading.value[container.id] = 'restart'
   try {
-    await dockerApi.restartContainer(resourceId.value, container.id)
-    ElMessage.success(`容器 ${container.name} 已重启`)
-    await loadContainers()
-  } catch (e: any) {
-    ElMessage.error(e.response?.data?.detail || '重启失败')
-  } finally {
-    delete actionLoading.value[container.id]
+    await ElMessageBox.confirm(
+      `确定要重启容器 ${container.name} 吗？服务可能会短暂中断。`,
+      '重启确认',
+      {
+        confirmButtonText: '确认重启',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    actionLoading.value[container.id] = 'restart'
+    try {
+      await dockerApi.restartContainer(resourceId.value, container.id)
+      ElMessage.success(`容器 ${container.name} 已重启`)
+      await loadContainers()
+    } catch (e: any) {
+      ElMessage.error(e.response?.data?.detail || '重启失败')
+    } finally {
+      delete actionLoading.value[container.id]
+    }
+  } catch {
+    // User cancelled
   }
 }
 

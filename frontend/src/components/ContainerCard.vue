@@ -22,10 +22,9 @@
 
       <!-- Right: Actions -->
       <div class="container-actions">
-        <!-- Primary Actions: Start/Stop -->
-        <div class="action-group primary">
+        <!-- Primary Actions: Start -->
+        <div class="action-group primary" v-if="container.state !== 'running'">
           <el-button 
-            v-if="container.state !== 'running'"
             type="success" 
             size="default"
             :loading="actionLoading === 'start'"
@@ -35,53 +34,39 @@
             <el-icon><VideoPlay /></el-icon>
             <span>启动</span>
           </el-button>
-          
-          <el-button 
-            v-if="container.state === 'running'"
-            type="danger" 
-            size="default"
-            :loading="actionLoading === 'stop'"
-            @click="$emit('stop')"
-            class="action-btn"
-          >
-            <el-icon><VideoPause /></el-icon>
-            <span>停止</span>
-          </el-button>
         </div>
 
         <!-- Secondary Actions -->
         <div class="action-group secondary">
-          <el-tooltip content="重启">
-            <el-button 
-              type="warning" 
-              circle
-              size="default"
-              :loading="actionLoading === 'restart'"
-              @click="$emit('restart')"
-              class="icon-btn"
-            >
-              <el-icon><Refresh /></el-icon>
-            </el-button>
-          </el-tooltip>
-          
-          <el-tooltip content="查看日志">
-            <el-button 
-              :type="showLogs ? 'primary' : 'info'"
-              circle
-              size="default"
-              @click="$emit('toggle-logs')"
-              class="icon-btn"
-            >
-              <el-icon><Document /></el-icon>
-            </el-button>
-          </el-tooltip>
+          <el-button
+            :type="showLogs ? 'primary' : 'info'"
+            size="default"
+            @click="$emit('toggle-logs')"
+            class="action-btn log-btn"
+          >
+            <el-icon><Document /></el-icon>
+            <span>日志</span>
+          </el-button>
 
           <el-dropdown trigger="click" placement="bottom-end">
-            <el-button circle size="default" class="icon-btn">
+            <el-button
+              circle
+              size="default"
+              class="icon-btn"
+              :loading="['stop', 'restart', 'delete'].includes(actionLoading || '')"
+            >
               <el-icon><More /></el-icon>
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item @click="$emit('restart')">
+                  <el-icon><Refresh /></el-icon>
+                  <span>重启容器</span>
+                </el-dropdown-item>
+                <el-dropdown-item v-if="container.state === 'running'" @click="$emit('stop')">
+                  <el-icon><VideoPause /></el-icon>
+                  <span>停止容器</span>
+                </el-dropdown-item>
                 <el-dropdown-item @click="$emit('delete')" class="danger-item">
                   <el-icon><Delete /></el-icon>
                   <span>删除容器</span>
@@ -252,6 +237,10 @@ const formatPorts = (ports: string) => {
 
 .icon-btn :deep(.el-icon) {
   font-size: 16px;
+}
+
+.log-btn {
+  padding: 8px 12px;
 }
 
 .danger-item {
