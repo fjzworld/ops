@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.core.database import SessionLocal
 from app.models.resource import Resource, ResourceStatus
 from app.core.monitoring import clear_metrics
@@ -20,7 +20,7 @@ async def check_resource_status():
             db = SessionLocal()
             try:
                 # Find active resources that haven't been seen recently
-                threshold = datetime.utcnow() - timedelta(seconds=90)
+                threshold = datetime.now(timezone.utc) - timedelta(seconds=90)
 
                 # Active resources with old last_seen
                 stale_resources = (

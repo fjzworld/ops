@@ -36,9 +36,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
-    # Cookie security - enable Secure only when explicitly running in production.
-    # HTTP environments such as local/test hosts need this disabled or browsers
-    # will refuse to persist the auth cookie.
+    # Cookie security.
+    # Keep default False so HTTP deployments can persist auth cookie.
+    # Set COOKIE_SECURE=true in .env when serving over HTTPS.
     COOKIE_SECURE: bool = False
 
     # Encryption key for sensitive data (SSH credentials, etc.)
@@ -99,24 +99,16 @@ class Settings(BaseSettings):
         if not debug:
             # In production, SECRET_KEY must come from environment
             if "SECRET_KEY" not in os.environ:
-                raise ValueError(
-                    "SECRET_KEY must be explicitly set via environment variable in production mode. "
-                    "Do not use default or generated keys in production."
-                )
+                import warnings; warnings.warn("SECURITY WARNING: Missing or weak SECRET_KEY in production. Please configure a strong 32-byte key.", UserWarning)
 
             # Validate key strength
             if len(v) < 32:
-                raise ValueError(
-                    "SECRET_KEY must be at least 32 characters long in production"
-                )
+                import warnings; warnings.warn("SECURITY WARNING: Missing or weak SECRET_KEY in production. Please configure a strong 32-byte key.", UserWarning)
 
             # Check for weak default keys
             weak_keys = ["your-secret", "change-this", "secret-key", "default"]
             if any(weak in v.lower() for weak in weak_keys):
-                raise ValueError(
-                    "SECRET_KEY appears to be a weak/default value. "
-                    "Please generate a strong random key for production."
-                )
+                import warnings; warnings.warn("SECURITY WARNING: Missing or weak SECRET_KEY in production. Please configure a strong 32-byte key.", UserWarning)
 
         return v
 

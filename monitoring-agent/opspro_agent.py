@@ -9,7 +9,7 @@ import time
 import json
 import psutil
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Configuration (to be updated during deployment)
 BACKEND_URL = os.getenv("OPSPRO_BACKEND_URL", "http://localhost/api/v1")
@@ -139,7 +139,7 @@ class MetricsCollector:
             "network_out": round(net_out, 2),
             "top_processes": self.get_top_processes(),
             "uptime": self.get_uptime(),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
 

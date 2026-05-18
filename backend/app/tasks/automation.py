@@ -39,8 +39,7 @@ def _create_execution_history(db, operation: Operation, start_time: datetime):
 
 def _execute_ssh_script(resource: Resource, script_content: str) -> dict:
     ssh = create_secure_client()
-    # Explicitly set policy to handle containerized environments where known_hosts is missing
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    # create_secure_client() already sets the host key policy
     output_buffer = io.StringIO()
     exit_code = -1
     status = "failed"

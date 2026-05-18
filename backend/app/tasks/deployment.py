@@ -1,8 +1,8 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from app.tasks.celery_app import celery_app
 from app.core.database import SessionLocal
-from app.models.task import Task, TaskStatus
+from app.models.operation import Operation, OperationStatus, OperationExecution
 from app.models.resource import Resource
 from app.services.alloy_deployer import deploy_alloy_agent
 from app.services.resource_detector import SSHCredentials
@@ -25,30 +25,30 @@ def deploy_alloy_task(
     logger.info(f"DEBUG: Entering deploy_alloy_task for task {task_id}")
     db = SessionLocal()
     try:
-        task = db.query(Task).filter(Task.id == task_id).first()
+        task = db.query(Operation).filter(Operation.id == task_id).first()
         if not task:
             logger.error(f"Task {task_id} not found")
             return
 
-        resource = db.query(Resource).get(resource_id)
+        resource = db.get(Resource, resource_id)
         if not resource:
             error_msg = f"Resource {resource_id} not found"
-            task.status = TaskStatus.FAILED
+            task.status = OperationStatus.FAILED
             task.last_error = error_msg
             db.commit()
             return
 
         # Create execution record
-        from app.models.task import TaskExecution
+        
 
-        execution = TaskExecution(
-            task_id=task.id, status=TaskStatus.RUNNING, start_time=datetime.now()
+        execution = OperationExecution(
+            operation_id=task.id, operation_type=task.operation_type, status=OperationStatus.RUNNING, start_time=datetime.now(timezone.utc)
         )
         db.add(execution)
         db.commit()
         db.refresh(execution)
 
-        task.last_run_at = datetime.now()
+        task.last_run_at = datetime.now(timezone.utc)
         db.commit()
 
         # Fix: Only use provided credentials if a password or key is actually provided.
@@ -67,11 +67,11 @@ def deploy_alloy_task(
                 credentials = CredentialService.get_ssh_credentials(resource)
             except Exception as e:
                 error_msg = f"Failed to load credentials: {str(e)}"
-                task.status = TaskStatus.FAILED
+                task.status = OperationStatus.FAILED
                 task.last_error = error_msg
 
-                execution.status = TaskStatus.FAILED
-                execution.end_time = datetime.now()
+                execution.status = OperationStatus.FAILED
+                execution.end_time = datetime.now(timezone.utc)
                 execution.error = error_msg
                 db.commit()
                 return
@@ -83,34 +83,34 @@ def deploy_alloy_task(
                 backend_url=backend_url,
             )
 
-            execution.end_time = datetime.now()
+            execution.end_time = datetime.now(timezone.utc)
             execution.output = logs
 
             if success:
-                task.status = TaskStatus.SUCCESS
+                task.status = OperationStatus.SUCCESS
                 task.last_output = logs
                 task.success_count += 1
 
-                execution.status = TaskStatus.SUCCESS
+                execution.status = OperationStatus.SUCCESS
             else:
-                task.status = TaskStatus.FAILED
+                task.status = OperationStatus.FAILED
                 task.last_error = "Deployment failed. Check execution logs."
                 task.last_output = logs
                 task.failure_count += 1
 
-                execution.status = TaskStatus.FAILED
+                execution.status = OperationStatus.FAILED
                 execution.error = "Deployment failed"
 
         except Exception as e:
             logger.exception(f"Error during Alloy deployment: {e}")
             error_msg = str(e)
 
-            task.status = TaskStatus.FAILED
+            task.status = OperationStatus.FAILED
             task.last_error = error_msg
             task.failure_count += 1
 
-            execution.status = TaskStatus.FAILED
-            execution.end_time = datetime.now()
+            execution.status = OperationStatus.FAILED
+            execution.end_time = datetime.now(timezone.utc)
             execution.error = error_msg
 
         task.execution_count += 1

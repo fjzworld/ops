@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import httpx
 from datetime import datetime, timezone
 from sqlalchemy import func
 from app.tasks.celery_app import celery_app
@@ -74,7 +75,7 @@ def sync_resource_status():
                     resp_net_out.json(),
                 )
 
-        import httpx
+
 
         cpu_data, mem_data, disk_data, net_in_data, net_out_data = asyncio.run(
             fetch_metrics()

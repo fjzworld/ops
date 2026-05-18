@@ -5,6 +5,7 @@ import base64
 import os
 import hashlib
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +17,22 @@ def get_cipher_suite():
     生成 Fernet 加密套件
     优先使用 ENCRYPTION_KEY 环境变量，如果没有则使用 SECRET_KEY 派生
     """
-    # 优先使用专用的加密密钥
     encryption_key = os.getenv("ENCRYPTION_KEY")
 
-    if encryption_key:
-        key_source = encryption_key.encode()
-    else:
-        # WARNING: If SECRET_KEY changes, all encrypted data becomes unrecoverable. Set ENCRYPTION_KEY env var for production.
-        # 使用 SHA-256 派生 32 字节密钥（避免直接截取）
+    if not encryption_key:
+        if not settings.DEBUG:
+            warnings.warn(
+                "SECURITY WARNING: ENCRYPTION_KEY is not set in production. "
+                "Falling back to SECRET_KEY-derived key. Configure ENCRYPTION_KEY as soon as possible.",
+                UserWarning,
+            )
+        logger.warning(
+            "ENCRYPTION_KEY not set, deriving from SECRET_KEY. "
+            "ALL encrypted data will be LOST if SECRET_KEY changes."
+        )
         key_source = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+    else:
+        key_source = encryption_key.encode()
 
     # Fernet key 必须是 32 字节的 URL-safe base64 编码
     # base64 编码 32 字节 = 44 字符（包含结尾的 =）

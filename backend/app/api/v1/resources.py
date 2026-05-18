@@ -16,7 +16,8 @@ from app.core.exceptions import (
 )
 from app.models.user import User
 from app.models.resource import Resource, ResourceType, ResourceStatus
-from app.models.task import Task, TaskStatus
+from app.models.operation import Operation, OperationType, OperationStatus
+from app.models.task import TaskStatus
 from app.schemas.resource import (
     ResourceCreate,
     ResourceUpdate,
@@ -566,20 +567,21 @@ async def deploy_alloy_monitoring_agent(
     try:
         backend_url = probe_request.backend_url or settings.EXTERNAL_API_URL
 
-        task = Task(
+        operation = Operation(
             name=f"Deploy Alloy to {resource.ip_address}",
             description=f"Automated Alloy agent deployment for resource {resource.id}",
-            task_type="deploy_alloy",
+            operation_type=OperationType.SCRIPT_EXEC,
+            config={"deployment_type": "alloy"},
             target_resources=[resource_id],
-            status=TaskStatus.PENDING,
+            status=OperationStatus.PENDING,
             created_by=current_user.username,
         )
-        db.add(task)
+        db.add(operation)
         await db.commit()
-        await db.refresh(task)
+        await db.refresh(operation)
 
         deploy_alloy_task.delay(
-            task.id,
+            operation.id,
             resource_id,
             backend_url,
             ssh_username=probe_request.ssh_username,

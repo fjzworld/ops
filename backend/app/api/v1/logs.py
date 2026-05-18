@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_async_db
-from app.models.task import Task, TaskStatus
+from app.models.operation import Operation, OperationStatus, OperationType
 from app.models.resource import Resource
 from app.models.user import User
 from app.tasks.automation import run_automation_task
@@ -77,6 +77,7 @@ async def search_logs(
         LogDirection.BACKWARD, description="Order (FORWARD or BACKWARD)"
     ),
     step: Optional[str] = Query(None, description="Query resolution step width"),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Search logs in Loki using LogQL
@@ -126,6 +127,7 @@ async def search_logs(
 async def get_labels(
     start: Optional[str] = Query(None, description="Start time in nanoseconds"),
     end: Optional[str] = Query(None, description="End time in nanoseconds"),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Get all available labels
@@ -159,6 +161,7 @@ async def get_label_values(
     query: Optional[str] = Query(
         None, description="LogQL query to filter label values"
     ),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Get values for a specific label
@@ -258,29 +261,32 @@ async def deploy_promtail(
             message=f"Failed to render deployment template: {str(e)}"
         )
 
-    task = Task(
+    operation = Operation(
         name=f"Deploy Promtail to {resource.name}",
-        description=f"Auto-generated task to deploy Promtail to {resource.name} ({resource.ip_address})",
-        task_type="script",
-        script_content=script_content,
+        description=f"Auto-generated: Deploy Promtail to {resource.name}",
+        operation_type=OperationType.SCRIPT_EXEC,
+        config={"script_content": script_content},
         target_resources=[resource.id],
-        status=TaskStatus.PENDING,
+        enabled=True,
+        status=OperationStatus.PENDING,
+        created_by="system",
+        created_at=datetime.now(timezone.utc),
     )
 
-    db.add(task)
+    db.add(operation)
     await db.commit()
-    await db.refresh(task)
+    await db.refresh(operation)
 
     try:
-        run_automation_task.delay(task.id)
+        run_automation_task.delay(operation.id)
     except Exception as e:
-        task.status = TaskStatus.FAILED
-        task.last_error = f"Failed to queue task: {str(e)}"
+        operation.status = OperationStatus.FAILED
+        operation.last_error = f"Failed to queue task: {str(e)}"
         await db.commit()
         raise InternalServerError(message=f"Failed to queue deployment task: {str(e)}")
 
     return {
-        "task_id": task.id,
+        "operation_id": operation.id,
         "message": "Promtail deployment started",
         "status": "pending",
     }

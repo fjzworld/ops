@@ -5,6 +5,7 @@ Executes docker commands on remote servers
 
 import json
 import logging
+import re
 from typing import List
 from pydantic import BaseModel
 from app.services.resource_detector import SSHCredentials, ResourceDetector
@@ -72,8 +73,14 @@ class DockerService:
         finally:
             self.detector.close()
 
+    def _validate_container_id(self, container_id: str) -> None:
+        """Validate container ID to prevent command injection"""
+        if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,127}$", container_id):
+            raise ValueError(f"Invalid container ID format: {container_id}")
+
     def start_container(self, container_id: str) -> bool:
         """Start a stopped container"""
+        self._validate_container_id(container_id)
         try:
             self.detector.connect()
             self.detector.execute_command(f"docker start {container_id}")
@@ -86,6 +93,7 @@ class DockerService:
 
     def stop_container(self, container_id: str) -> bool:
         """Stop a running container"""
+        self._validate_container_id(container_id)
         try:
             self.detector.connect()
             self.detector.execute_command(f"docker stop {container_id}")
@@ -98,6 +106,7 @@ class DockerService:
 
     def restart_container(self, container_id: str) -> bool:
         """Restart a container"""
+        self._validate_container_id(container_id)
         try:
             self.detector.connect()
             self.detector.execute_command(f"docker restart {container_id}")
@@ -110,6 +119,7 @@ class DockerService:
 
     def remove_container(self, container_id: str) -> bool:
         """Remove a container (force)"""
+        self._validate_container_id(container_id)
         try:
             self.detector.connect()
             self.detector.execute_command(f"docker rm -f {container_id}")
@@ -128,6 +138,7 @@ class DockerService:
             container_id: Container ID or name
             tail: Number of lines to return (default 100)
         """
+        self._validate_container_id(container_id)
         try:
             self.detector.connect()
             output = self.detector.execute_command(

@@ -1,4 +1,5 @@
 import logging
+import re
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
@@ -393,16 +394,43 @@ import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
 
 
+LOG_PATH_PATTERN = re.compile(r'^/[a-zA-Z0-9/_.\'\-]+$')
+
+
 @router.websocket("/{id}/log-stream")
 async def log_stream_endpoint(
     websocket: WebSocket, id: int, db: AsyncSession = Depends(get_async_db)
 ):
     """Real-time log stream via WebSocket"""
+    # 在 accept 之前验证身份 — token 从 Cookie 或 query param 获取
+    from app.core.security import decode_access_token
+    from app.core.token_blacklist import is_token_blacklisted
+
+    token = websocket.cookies.get("access_token") or websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+
+    payload = decode_access_token(token)
+    if not payload:
+        await websocket.close(code=4001, reason="Invalid or expired token")
+        return
+
+    if is_token_blacklisted(token):
+        await websocket.close(code=4001, reason="Token revoked")
+        return
+
     await websocket.accept()
 
     middleware = await db.get(Middleware, id)
     if not middleware or not middleware.log_path:
         await websocket.send_text("Middleware not found or log path not configured")
+        await websocket.close()
+        return
+
+    # 校验 log_path 防止命令注入
+    if not LOG_PATH_PATTERN.match(middleware.log_path):
+        await websocket.send_text("[System Error] Invalid log path configured")
         await websocket.close()
         return
 
@@ -420,7 +448,7 @@ async def log_stream_endpoint(
         logger.info(f"Connecting to {resource.ip_address} for logs...")
 
         # Run blocking connect in executor
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(None, detector.connect)
             logger.info("SSH connection established.")

@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 import asyncio
 import logging
 import zipfile
@@ -6,6 +6,7 @@ import tarfile
 import tempfile
 import shutil
 from functools import lru_cache
+import cachetools
 from pathlib import Path
 from typing import List, Tuple, Optional
 from datetime import datetime
@@ -79,7 +80,7 @@ class _DeployConfig:
             self.container_name = defaults.get("container_name")
 
 
-@lru_cache(maxsize=3)
+@cachetools.cached(cache=cachetools.TTLCache(maxsize=3, ttl=300))
 def _get_deploy_config(deploy_type: str) -> _DeployConfig:
     return _DeployConfig(deploy_type)
 
@@ -171,8 +172,10 @@ class DeployService:
         restart_container: bool = True,
     ) -> List[DeployResult]:
         """Deploy code to multiple servers in parallel"""
+        from fastapi.concurrency import run_in_threadpool
         tasks = [
-            DeployService._deploy_single(
+            run_in_threadpool(
+                DeployService._deploy_single,
                 file_path, resource, deploy_type, restart_keepalived, restart_container
             )
             for resource in resources
@@ -196,7 +199,7 @@ class DeployService:
         return deploy_results
 
     @staticmethod
-    async def _deploy_single(
+    def _deploy_single(
         file_path: str,
         resource: Resource,
         deploy_type: str,
@@ -226,6 +229,24 @@ class DeployService:
         backup_dir = cfg.backup_dir
         backup_prefix = deploy_type
         restart_commands = list(cfg.restart_commands)
+
+        import re
+        PATH_PATTERN = re.compile(r'^/[a-zA-Z0-9/_.\-@]+$')
+        FOLDER_PATTERN = re.compile(r'^[a-zA-Z0-9_.\-]+$')
+
+        def _validate_path(path: str, name: str, is_folder: bool = False):
+            if not path:
+                raise ValueError(f"Path is empty for {name}")
+            pattern = FOLDER_PATTERN if is_folder else PATH_PATTERN
+            if not pattern.match(path):
+                raise ValueError(f"Invalid path format in {name}: {path}")
+            if '..' in path:
+                raise ValueError(f"Path traversal detected in {name}: {path}")
+
+        _validate_path(target_dir, "target_dir")
+        _validate_path(backup_dir, "backup_dir")
+        _validate_path(target_parent, "parent_dir")
+        _validate_path(target_folder, "folder_name", is_folder=True)
 
         credentials = CredentialService.get_ssh_credentials(resource)
         client = create_secure_client()
@@ -405,6 +426,12 @@ class DeployService:
     @staticmethod
     async def get_backups(resource: Resource, deploy_type: str = "frontend") -> List[dict]:
         """Get backup list from remote server"""
+        from fastapi.concurrency import run_in_threadpool
+        return await run_in_threadpool(DeployService._get_backups_sync, resource, deploy_type)
+
+    @staticmethod
+    def _get_backups_sync(resource: Resource, deploy_type: str = "frontend") -> List[dict]:
+        """Get backup list from remote server (sync)"""
         credentials = CredentialService.get_ssh_credentials(resource)
         client = create_secure_client()
 
@@ -474,6 +501,21 @@ class DeployService:
         restart_container: bool = True,
     ) -> DeployResult:
         """Rollback to a specific backup"""
+        from fastapi.concurrency import run_in_threadpool
+        return await run_in_threadpool(
+            DeployService._rollback_sync,
+            resource, backup_name, deploy_type, restart_keepalived, restart_container
+        )
+
+    @staticmethod
+    def _rollback_sync(
+        resource: Resource,
+        backup_name: str,
+        deploy_type: str = "frontend",
+        restart_keepalived: bool = False,
+        restart_container: bool = True,
+    ) -> DeployResult:
+        """Rollback to a specific backup (sync)"""
         server_name = resource.ip_address or resource.name
         steps: List[DeployStepLog] = []
 
