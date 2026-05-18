@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { ElMessage } from 'element-plus'
 import type { UserRole } from '@/types/user'
 
 const routes: RouteRecordRaw[] = [
@@ -139,6 +140,15 @@ router.beforeEach(async (to, _from, next) => {
         }
         if (!authStore.user) {
             next('/login')
+            return
+        }
+
+        // 角色权限校验
+        const userRole = authStore.user.role as UserRole
+        const allowedRoles = (to.meta.roles as UserRole[]) || ['admin', 'operator', 'user', 'readonly']
+        if (!hasPermission(userRole, allowedRoles)) {
+            ElMessage.error('权限不足，无法访问该页面')
+            next('/unauthorized')
             return
         }
     }

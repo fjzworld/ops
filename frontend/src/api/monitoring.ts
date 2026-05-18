@@ -81,14 +81,14 @@ export const monitoringApi = {
 
     // Helper to get Disk Partitions Total GB
     getResourceDiskPartitionsTotal(resourceId: string | number) {
-        return this.query(
+        return monitoringApi.query(
             `opspro_disk_partition_total_gb{resource_id="${resourceId}"}`
         )
     },
 
     // Helper to get Disk Partitions Used GB
     getResourceDiskPartitionsUsed(resourceId: string | number) {
-        return this.query(
+        return monitoringApi.query(
             `opspro_disk_partition_used_gb{resource_id="${resourceId}"}`
         )
     },

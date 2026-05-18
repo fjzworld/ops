@@ -35,10 +35,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
-    # Cookie security - set to True ONLY when serving over HTTPS
-    # Default False because most deployments start without HTTPS
-    # Set to True when deploying behind HTTPS. Override via COOKIE_SECURE env var.
-    COOKIE_SECURE: bool = False
+    # Cookie security - should be True in production (HTTPS)
+    # Set COOKIE_SECURE=false for local development without HTTPS
+    COOKIE_SECURE: bool = True
 
     # Encryption key for sensitive data (SSH credentials, etc.)
     ENCRYPTION_KEY: Optional[str] = Field(
