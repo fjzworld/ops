@@ -1,11 +1,11 @@
 import logging
 import httpx
 import os
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any
+from typing import Dict, Any, Iterable
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.resource import Resource
+from app.models.resource import ResourceStatus
 from app.models.alert import Alert, AlertStatus, AlertSeverity
 
 logger = logging.getLogger(__name__)
@@ -14,6 +14,26 @@ PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://prometheus:9090")
 
 
 class MonitoringService:
+    @staticmethod
+    def get_resource_summary(
+        resources: Iterable[Resource], high_load_count: int
+    ) -> Dict[str, int]:
+        resource_list = list(resources)
+        active_count = sum(
+            1 for res in resource_list if res.status == ResourceStatus.ACTIVE
+        )
+        offline_count = sum(
+            1 for res in resource_list if res.status == ResourceStatus.OFFLINE
+        )
+        healthy_count = max(0, active_count - high_load_count)
+
+        return {
+            "active_nodes": active_count,
+            "offline_nodes": offline_count,
+            "healthy_nodes": healthy_count,
+            "total_resources": len(resource_list),
+        }
+
     @staticmethod
     async def get_dashboard_stats(db: AsyncSession) -> Dict[str, Any]:
         """
@@ -123,16 +143,9 @@ class MonitoringService:
                 result = await db.execute(stmt_resources)
                 all_db_resources = result.scalars().all()
 
-                now = datetime.now(timezone.utc)
-                offline_threshold = now - timedelta(seconds=90)
-
-                online_count = sum(
-                    1
-                    for res in all_db_resources
-                    if res.last_seen and res.last_seen > offline_threshold
+                resource_summary = MonitoringService.get_resource_summary(
+                    all_db_resources, high_load_count
                 )
-                offline_count = len(all_db_resources) - online_count
-                healthy_count = max(0, online_count - high_load_count)
 
                 # Calculate averages for Monitoring Dashboard
                 avg_cpu = (
@@ -161,9 +174,9 @@ class MonitoringService:
                     "summary": {
                         "critical_alerts": critical_alerts_count,
                         "high_load_nodes": high_load_count,
-                        "offline_nodes": offline_count,
-                        "healthy_nodes": healthy_count,
-                        "total_resources": len(all_db_resources),
+                        "offline_nodes": resource_summary["offline_nodes"],
+                        "healthy_nodes": resource_summary["healthy_nodes"],
+                        "total_resources": resource_summary["total_resources"],
                     },
                     "distribution": {"cpu": distribution},
                     "all_nodes": processed_nodes,

@@ -14,10 +14,27 @@ export interface PrometheusResult {
     };
 }
 
+export interface StatusSyncHealth {
+    status: 'ok' | 'warning' | 'error' | 'unknown';
+    last_run_at: string | null;
+    last_success_at: string | null;
+    active_count: number;
+    offline_count: number;
+    consecutive_zero_active_runs: number;
+    last_error: string | null;
+    message: string;
+    updated_at?: string;
+    active_resource_ids?: number[];
+}
+
 export const monitoringApi = {
     // Dashboard (Service based)
     getDashboard() {
         return api.get<DashboardData>('/monitoring/dashboard')
+    },
+
+    getStatusSyncHealth() {
+        return api.get<StatusSyncHealth>('/monitoring/status-sync-health')
     },
 
     // Prometheus Proxy: Instant query

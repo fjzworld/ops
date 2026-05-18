@@ -6,6 +6,7 @@ from app.models.user import User
 from app.api.v1.auth import get_current_active_user
 from app.services.monitoring_service import MonitoringService
 from app.core.exceptions import InternalServerError
+from app.core.status_sync_health import read_status_sync_health
 import httpx
 import os
 
@@ -87,3 +88,13 @@ async def get_dashboard_data(
     Get dashboard monitoring data
     """
     return await MonitoringService.get_dashboard_stats(db)
+
+
+@router.get("/status-sync-health")
+async def get_status_sync_health(
+    current_user: User = Depends(get_current_active_user),
+):
+    """
+    Read-only health snapshot for the resource status sync task.
+    """
+    return read_status_sync_health()

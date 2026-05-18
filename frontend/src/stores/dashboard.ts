@@ -19,23 +19,26 @@ export interface DashboardData {
     top_nodes: any[];
 }
 
+const createDefaultDashboardData = (): DashboardData => ({
+    summary: {
+        critical_alerts: 0,
+        high_load_nodes: 0,
+        offline_nodes: 0,
+        healthy_nodes: 0,
+        total_resources: 0
+    },
+    distribution: {
+        cpu: {}
+    },
+    all_nodes: [],
+    top_nodes: []
+})
+
 export const useDashboardStore = defineStore('dashboard', () => {
-    const data = ref<DashboardData>({
-        summary: {
-            critical_alerts: 0,
-            high_load_nodes: 0,
-            offline_nodes: 0,
-            healthy_nodes: 0,
-            total_resources: 0
-        },
-        distribution: {
-            cpu: {}
-        },
-        all_nodes: [],
-        top_nodes: []
-    })
+    const data = ref<DashboardData>(createDefaultDashboardData())
     const loading = ref(false)
     const lastUpdated = ref<Date | null>(null)
+    const lastError = ref<string | null>(null)
 
     const fetchDashboardData = async () => {
         loading.value = true
@@ -43,8 +46,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
             const res = await monitoringApi.getDashboard()
             data.value = res.data
             lastUpdated.value = new Date()
+            lastError.value = null
         } catch (error) {
             console.error('Failed to fetch dashboard data:', error)
+            data.value = createDefaultDashboardData()
+            lastError.value = error instanceof Error ? error.message : 'unknown error'
         } finally {
             loading.value = false
         }
@@ -54,6 +60,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
         data,
         loading,
         lastUpdated,
+        lastError,
         fetchDashboardData
     }
 })

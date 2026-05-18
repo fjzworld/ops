@@ -366,7 +366,15 @@ const handleUpload = async () => {
     }
   } catch (error: unknown) {
     const msg = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '上传失败'
-    uploadResult.value = { file_id: '', filename: '', deploy_type: deployType.value, size: 0, valid: false, message: msg }
+    uploadResult.value = {
+      file_id: '',
+      filename: '',
+      deploy_type: deployType.value,
+      target_path: '',
+      size: 0,
+      valid: false,
+      message: msg
+    }
   } finally {
     uploading.value = false
   }

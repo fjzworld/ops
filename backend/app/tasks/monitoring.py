@@ -1,9 +1,11 @@
 import asyncio
 import logging
+from datetime import datetime, timezone
 from sqlalchemy import func
 from app.tasks.celery_app import celery_app
 from app.core.prometheus import PrometheusClient
 from app.core.database import SessionLocal
+from app.core.status_sync_health import write_status_sync_health
 from app.models.resource import Resource, ResourceStatus
 
 logger = logging.getLogger(__name__)
@@ -16,6 +18,7 @@ def sync_resource_status():
     Resources seen in Prometheus in the last 2m are marked ACTIVE.
     Others are marked OFFLINE.
     """
+    started_at = datetime.now(timezone.utc).isoformat()
     try:
         # Create a new event loop for this thread if necessary, or use asyncio.run
         # Celery workers run in threads or processes.
@@ -103,6 +106,14 @@ def sync_resource_status():
 
     except Exception as e:
         logger.error(f"Failed to query metrics from Prometheus: {e}")
+        write_status_sync_health(
+            {
+                "status": "error",
+                "last_run_at": started_at,
+                "last_error": str(e),
+                "message": f"Prometheus 查询失败: {e}",
+            }
+        )
         return f"Error: {e}"
 
     db = SessionLocal()
@@ -156,10 +167,64 @@ def sync_resource_status():
         db.commit()
         msg = f"Synced status: {active_count} active (with metrics), {offline_count} offline"
         logger.info(msg)
+
+        previous = write_status_sync_health(
+            {
+                "status": "ok" if active_count > 0 else "warning",
+                "last_run_at": started_at,
+                "last_success_at": started_at,
+                "active_count": active_count,
+                "offline_count": offline_count,
+                "active_resource_ids": active_ids,
+                "last_error": None,
+                "message": msg,
+            }
+        )
+
+        zero_runs = int(previous.get("consecutive_zero_active_runs", 0))
+        if active_count > 0:
+            zero_runs = 0
+        else:
+            zero_runs += 1
+
+        health_payload = write_status_sync_health(
+            {
+                "status": "ok" if active_count > 0 else "warning",
+                "consecutive_zero_active_runs": zero_runs,
+                "message": msg,
+            }
+        )
+
+        if active_count == 0:
+            warning_msg = (
+                "Resource status sync returned 0 active resources. "
+                "Check Alloy remote_write, Prometheus scrape data, and resource_id labels."
+            )
+            if zero_runs >= 3:
+                logger.error(
+                    "%s Consecutive zero-active runs=%s. health=%s",
+                    warning_msg,
+                    zero_runs,
+                    health_payload,
+                )
+            else:
+                logger.warning(
+                    "%s Consecutive zero-active runs=%s.",
+                    warning_msg,
+                    zero_runs,
+                )
         return msg
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to sync resource status to database: {e}")
+        write_status_sync_health(
+            {
+                "status": "error",
+                "last_run_at": started_at,
+                "last_error": str(e),
+                "message": f"状态同步写库失败: {e}",
+            }
+        )
         return f"Error: {e}"
     finally:
         db.close()

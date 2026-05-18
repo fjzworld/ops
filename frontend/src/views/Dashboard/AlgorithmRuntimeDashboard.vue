@@ -243,9 +243,6 @@ const pageTitle = computed(() => dashboard.value?.title || dashboardConfig.value
 const showInitialLoading = computed(() =>
   configured.value && !dashboard.value && loading.value
 )
-const browserTimezoneLabel = computed(() =>
-  Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai'
-)
 const formattedTimeRange = computed(() =>
   `${formatDateTime(timeRange.value[0])} 至 ${formatDateTime(timeRange.value[1])}`
 )
